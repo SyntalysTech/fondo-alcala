@@ -303,7 +303,7 @@ function DetailPanel({ reservation, onClose, onAction }) {
       />
 
       {/* Panel */}
-      <div className="fixed top-0 right-0 bottom-0 w-full max-w-[480px] bg-white z-50 shadow-2xl overflow-y-auto animate-slide-panel">
+      <div className="fixed inset-0 md:inset-auto md:top-0 md:right-0 md:bottom-0 md:w-full md:max-w-[480px] bg-white z-50 shadow-2xl overflow-y-auto animate-slide-panel">
         {/* Header */}
         <div className="sticky top-0 bg-white border-b border-warm-border px-6 py-4 flex items-center justify-between z-10">
           <h2 className="font-serif text-xl font-bold text-gray-900">Detalle de Reserva</h2>
@@ -742,23 +742,23 @@ export default function ReservasPage() {
         />
       )}
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 md:py-8">
         {/* ── Header ── */}
-        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-8">
+        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-6 md:mb-8">
           <div>
-            <h1 className="font-serif text-3xl font-bold text-gray-900">Gestion de Reservas</h1>
-            <p className="mt-1.5 text-sm text-gray-500">
-              Administra reservas y gestiona la base de datos de clientes del restaurante
+            <h1 className="font-serif text-2xl md:text-3xl font-bold text-gray-900">Reservas</h1>
+            <p className="mt-1 text-xs md:text-sm text-gray-500">
+              Administra reservas y clientes del restaurante
             </p>
           </div>
-          <button className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gold hover:bg-gold-dark text-white font-semibold text-sm transition-colors shadow-sm">
+          <button className="inline-flex items-center gap-2 px-4 py-2 md:px-5 md:py-2.5 rounded-xl bg-gold hover:bg-gold-dark text-white font-semibold text-xs md:text-sm transition-colors shadow-sm">
             <PlusIcon />
             Nueva Reserva
           </button>
         </div>
 
         {/* ── Stats Row ── */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 md:gap-4 mb-6 md:mb-8">
           <StatCard
             label="Reservas Activas"
             value={totalActive}
@@ -819,7 +819,7 @@ export default function ReservasPage() {
 
           {/* Filter pills (reservas only) */}
           {activeTab === "reservas" && (
-            <div className="inline-flex bg-white rounded-xl border border-warm-border p-1 gap-0.5">
+            <div className="inline-flex flex-wrap bg-white rounded-xl border border-warm-border p-1 gap-0.5">
               {FILTER_OPTIONS.map((opt) => (
                 <button
                   key={opt.key}
@@ -909,7 +909,7 @@ export default function ReservasPage() {
                 <p className="text-xs text-gray-300 mt-1">Prueba con otros terminos de busqueda</p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 md:gap-4">
                 {filteredClients.map((c) => (
                   <ClientCard key={c.id} client={c} />
                 ))}

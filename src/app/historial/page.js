@@ -411,14 +411,14 @@ export default function HistorialPage() {
   }
 
   return (
-    <div className="p-6 lg:p-8 max-w-5xl mx-auto">
+    <div className="p-4 md:p-6 lg:p-8 max-w-5xl mx-auto">
       {/* ─── Header ─── */}
-      <div className="mb-8">
-        <h1 className="text-2xl font-serif font-bold text-stone-800 tracking-tight">
+      <div className="mb-5 md:mb-8">
+        <h1 className="text-xl md:text-2xl font-serif font-bold text-stone-800 tracking-tight">
           Historial de Llamadas
         </h1>
-        <p className="text-sm text-stone-400 mt-1">
-          Registro completo de interacciones con el agente
+        <p className="text-xs md:text-sm text-stone-400 mt-1">
+          Registro de interacciones con el agente
         </p>
       </div>
 
@@ -504,7 +504,7 @@ export default function HistorialPage() {
         </div>
 
         {/* Intent filter buttons */}
-        <div className="flex gap-1.5">
+        <div className="flex flex-wrap gap-1.5">
           {FILTER_CATEGORIES.map((cat) => (
             <button
               key={cat.key}

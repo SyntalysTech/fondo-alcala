@@ -211,22 +211,22 @@ export default function MetricasPage() {
   const busiestHourCount = Math.max(...peakHoursEntries.map(([, c]) => c), 0);
 
   return (
-    <div className="p-6 lg:p-8 space-y-6">
+    <div className="p-4 md:p-6 lg:p-8 space-y-4 md:space-y-6">
       {/* ─── Header ─── */}
-      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div>
-          <h1 className="font-serif text-3xl lg:text-4xl font-bold text-gray-900">Panel de Control</h1>
-          <p className="text-gray-500 mt-1">Resumen de actividad de tu asistente de voz con IA</p>
+          <h1 className="font-serif text-2xl md:text-3xl lg:text-4xl font-bold text-gray-900">Panel de Control</h1>
+          <p className="text-gray-500 text-sm mt-1">Resumen de actividad del asistente de voz</p>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
           {lastUpdated && (
-            <p className="text-xs text-gray-400">
+            <p className="text-xs text-gray-400 hidden sm:block">
               Actualizado: {lastUpdated.toLocaleTimeString("es-ES")}
             </p>
           )}
-          <button className="inline-flex items-center gap-2 bg-gold text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-gold-dark transition-colors shadow-sm">
+          <button className="inline-flex items-center gap-2 bg-gold text-white text-xs md:text-sm font-medium px-3 md:px-4 py-2 rounded-lg hover:bg-gold-dark transition-colors shadow-sm">
             <ExportIcon />
-            Exportar Datos
+            Exportar
           </button>
         </div>
       </div>
@@ -260,10 +260,10 @@ export default function MetricasPage() {
       </div>
 
       {/* ─── Two Columns: Keywords + Query Distribution ─── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
         {/* Keywords */}
-        <div className="bg-white rounded-xl border border-warm-border p-6 hover:shadow-lg transition-shadow duration-300">
-          <h2 className="font-semibold text-gray-900 mb-4 text-lg flex items-center gap-2">
+        <div className="bg-white rounded-xl border border-warm-border p-4 md:p-6 hover:shadow-lg transition-shadow duration-300">
+          <h2 className="font-semibold text-gray-900 mb-3 md:mb-4 text-base md:text-lg flex items-center gap-2">
             <span className="w-1.5 h-5 bg-gold rounded-full inline-block"></span>
             Palabras Clave Detectadas
           </h2>
@@ -299,8 +299,8 @@ export default function MetricasPage() {
         </div>
 
         {/* Query Distribution */}
-        <div className="bg-white rounded-xl border border-warm-border p-6 hover:shadow-lg transition-shadow duration-300">
-          <h2 className="font-semibold text-gray-900 mb-4 text-lg flex items-center gap-2">
+        <div className="bg-white rounded-xl border border-warm-border p-4 md:p-6 hover:shadow-lg transition-shadow duration-300">
+          <h2 className="font-semibold text-gray-900 mb-3 md:mb-4 text-base md:text-lg flex items-center gap-2">
             <span className="w-1.5 h-5 bg-gold rounded-full inline-block"></span>
             Distribucion de Consultas
           </h2>
@@ -334,8 +334,8 @@ export default function MetricasPage() {
       </div>
 
       {/* ─── Peak Hours ─── */}
-      <div className="bg-white rounded-xl border border-warm-border p-6 hover:shadow-lg transition-shadow duration-300">
-        <h2 className="font-semibold text-gray-900 mb-6 text-lg flex items-center gap-2">
+      <div className="bg-white rounded-xl border border-warm-border p-4 md:p-6 hover:shadow-lg transition-shadow duration-300">
+        <h2 className="font-semibold text-gray-900 mb-4 md:mb-6 text-base md:text-lg flex items-center gap-2">
           <span className="w-1.5 h-5 bg-gold rounded-full inline-block"></span>
           Actividad por Hora
         </h2>
@@ -388,69 +388,80 @@ export default function MetricasPage() {
       </div>
 
       {/* ─── Interactions Table ─── */}
-      <div className="bg-white rounded-xl border border-warm-border p-6 hover:shadow-lg transition-shadow duration-300">
-        <h2 className="font-semibold text-gray-900 mb-4 text-lg flex items-center gap-2">
+      <div className="bg-white rounded-xl border border-warm-border p-4 md:p-6 hover:shadow-lg transition-shadow duration-300">
+        <h2 className="font-semibold text-gray-900 mb-4 text-base md:text-lg flex items-center gap-2">
           <span className="w-1.5 h-5 bg-gold rounded-full inline-block"></span>
           Registro de Interacciones
         </h2>
         {recentLog.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-gray-300">
-            <TableIcon className="w-12 h-12 mb-3" />
+          <div className="flex flex-col items-center justify-center py-12 md:py-16 text-gray-300">
+            <TableIcon className="w-10 h-10 md:w-12 md:h-12 mb-3" />
             <p className="text-sm text-gray-400 font-medium">Sin interacciones registradas</p>
-            <p className="text-xs text-gray-400 mt-1">Las conversaciones apareceran aqui en tiempo real</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b-2 border-warm-border text-left">
-                  <th className="pb-3 pr-4 font-semibold text-gray-500 text-xs uppercase tracking-wider whitespace-nowrap">Hora</th>
-                  <th className="pb-3 pr-4 font-semibold text-gray-500 text-xs uppercase tracking-wider">Cliente dice</th>
-                  <th className="pb-3 pr-4 font-semibold text-gray-500 text-xs uppercase tracking-wider">Agente responde</th>
-                  <th className="pb-3 pr-4 font-semibold text-gray-500 text-xs uppercase tracking-wider whitespace-nowrap">Intencion</th>
-                  <th className="pb-3 font-semibold text-gray-500 text-xs uppercase tracking-wider">Keywords</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-warm-border/50">
-                {recentLog.map((entry, idx) => (
-                  <tr key={idx} className="hover:bg-cream/40 transition-colors">
-                    <td className="py-3 pr-4 text-gray-500 whitespace-nowrap font-mono text-xs">
-                      {entry.time || "--:--"}
-                    </td>
-                    <td className="py-3 pr-4 text-gray-700 max-w-[250px] truncate" title={entry.userMessage}>
-                      {entry.userMessage || "-"}
-                    </td>
-                    <td className="py-3 pr-4 text-gray-700 max-w-[250px] truncate" title={entry.agentResponse}>
-                      {entry.agentResponse || "-"}
-                    </td>
-                    <td className="py-3 pr-4 whitespace-nowrap">
-                      {entry.intent ? (
-                        <span
-                          className={`inline-block px-2.5 py-1 rounded-full text-xs font-semibold ${INTENT_COLORS[entry.intent] || "bg-gray-100 text-gray-600"}`}
-                        >
-                          {INTENT_LABELS[entry.intent] || entry.intent}
-                        </span>
-                      ) : (
-                        <span className="text-gray-300">--</span>
-                      )}
-                    </td>
-                    <td className="py-3">
-                      <div className="flex flex-wrap gap-1">
-                        {(entry.keywords || []).map((kw, i) => (
-                          <span
-                            key={i}
-                            className="bg-gold/10 text-gold-dark text-xs font-medium px-2 py-0.5 rounded-full border border-gold/20"
-                          >
-                            {kw}
-                          </span>
-                        ))}
-                      </div>
-                    </td>
+          <>
+            {/* Mobile: card list */}
+            <div className="md:hidden space-y-3">
+              {recentLog.map((entry, idx) => (
+                <div key={idx} className="border border-warm-border rounded-lg p-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-gray-400 font-mono">{entry.time || "--:--"}</span>
+                    {entry.intent && (
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${INTENT_COLORS[entry.intent] || "bg-gray-100 text-gray-600"}`}>
+                        {INTENT_LABELS[entry.intent] || entry.intent}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-500"><span className="font-semibold text-indigo-500">CL:</span> {entry.userMessage || "-"}</p>
+                  <p className="text-xs text-gray-600"><span className="font-semibold text-gold-dark">FA:</span> {entry.agentResponse || "-"}</p>
+                  {(entry.keywords || []).length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {entry.keywords.map((kw, i) => (
+                        <span key={i} className="bg-gold/10 text-gold-dark text-[10px] font-medium px-1.5 py-0.5 rounded-full border border-gold/20">{kw}</span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+            {/* Desktop: table */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b-2 border-warm-border text-left">
+                    <th className="pb-3 pr-4 font-semibold text-gray-500 text-xs uppercase tracking-wider whitespace-nowrap">Hora</th>
+                    <th className="pb-3 pr-4 font-semibold text-gray-500 text-xs uppercase tracking-wider">Cliente dice</th>
+                    <th className="pb-3 pr-4 font-semibold text-gray-500 text-xs uppercase tracking-wider">Agente responde</th>
+                    <th className="pb-3 pr-4 font-semibold text-gray-500 text-xs uppercase tracking-wider whitespace-nowrap">Intencion</th>
+                    <th className="pb-3 font-semibold text-gray-500 text-xs uppercase tracking-wider">Keywords</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-warm-border/50">
+                  {recentLog.map((entry, idx) => (
+                    <tr key={idx} className="hover:bg-cream/40 transition-colors">
+                      <td className="py-3 pr-4 text-gray-500 whitespace-nowrap font-mono text-xs">{entry.time || "--:--"}</td>
+                      <td className="py-3 pr-4 text-gray-700 max-w-[250px] truncate" title={entry.userMessage}>{entry.userMessage || "-"}</td>
+                      <td className="py-3 pr-4 text-gray-700 max-w-[250px] truncate" title={entry.agentResponse}>{entry.agentResponse || "-"}</td>
+                      <td className="py-3 pr-4 whitespace-nowrap">
+                        {entry.intent ? (
+                          <span className={`inline-block px-2.5 py-1 rounded-full text-xs font-semibold ${INTENT_COLORS[entry.intent] || "bg-gray-100 text-gray-600"}`}>
+                            {INTENT_LABELS[entry.intent] || entry.intent}
+                          </span>
+                        ) : <span className="text-gray-300">--</span>}
+                      </td>
+                      <td className="py-3">
+                        <div className="flex flex-wrap gap-1">
+                          {(entry.keywords || []).map((kw, i) => (
+                            <span key={i} className="bg-gold/10 text-gold-dark text-xs font-medium px-2 py-0.5 rounded-full border border-gold/20">{kw}</span>
+                          ))}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
     </div>
