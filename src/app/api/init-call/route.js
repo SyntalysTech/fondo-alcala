@@ -1,5 +1,5 @@
 import store from '@/lib/store';
-import { SYSTEM_PROMPT } from '@/lib/prompt';
+import { getSystemPrompt } from '@/lib/prompt';
 
 const GREETING = 'Hola, buenas, le atiende Elena desde Fonda Alcalá. ¿En qué puedo ayudarle?';
 
@@ -9,7 +9,7 @@ export async function POST(req) {
 
     // Create conversation with the exact hardcoded greeting so context stays in sync
     store.conversations.set(sessionId, [
-      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'system', content: getSystemPrompt() },
       { role: 'user', content: 'Hola, acabo de llamar al restaurante.' },
       { role: 'assistant', content: GREETING },
     ]);
@@ -20,14 +20,8 @@ export async function POST(req) {
     const hour = new Date().getHours();
     store.metrics.peakHours[hour] = (store.metrics.peakHours[hour] || 0) + 1;
 
-    store.metrics.callLog.push({
-      timestamp: new Date().toISOString(),
-      sessionId,
-      userMessage: '(inicio de llamada)',
-      agentResponse: GREETING,
-      intent: 'consulta_general',
-      keywords: [],
-    });
+    // Don't log the init greeting - it's not useful in the historial
+    // Only real user interactions will be logged via /api/chat
 
     return Response.json({ ok: true });
   } catch (error) {

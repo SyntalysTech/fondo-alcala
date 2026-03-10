@@ -158,6 +158,76 @@ function StatCard({ icon, label, value, accentColor, delta }) {
   );
 }
 
+/* ─── Export helper ─── */
+function exportToCSV(data) {
+  if (!data) return;
+
+  const rows = [];
+
+  // Metrics summary
+  rows.push(["=== RESUMEN DE METRICAS ==="]);
+  rows.push(["Llamadas Atendidas", data.totalCalls]);
+  rows.push(["Reservas Generadas", data.totalReservations]);
+  rows.push(["Cancelaciones", data.totalCancellations]);
+  rows.push(["Duracion Media (s)", data.avgCallDuration]);
+  rows.push([]);
+
+  // Reservations
+  rows.push(["=== RESERVAS ==="]);
+  rows.push(["Nombre", "Fecha", "Hora", "Comensales", "Estado", "Telefono", "Notas", "Fuente"]);
+  (data.reservations || []).forEach((r) => {
+    rows.push([r.name, r.date, r.time, r.guests, r.status, r.phone, r.notes, r.source]);
+  });
+  rows.push([]);
+
+  // Keywords
+  rows.push(["=== PALABRAS CLAVE ==="]);
+  rows.push(["Palabra", "Veces"]);
+  Object.entries(data.keywords || {}).sort((a, b) => b[1] - a[1]).forEach(([k, v]) => {
+    rows.push([k, v]);
+  });
+  rows.push([]);
+
+  // Query distribution
+  rows.push(["=== DISTRIBUCION DE CONSULTAS ==="]);
+  rows.push(["Tipo", "Cantidad"]);
+  Object.entries(data.queries || {}).sort((a, b) => b[1] - a[1]).forEach(([k, v]) => {
+    rows.push([k, v]);
+  });
+  rows.push([]);
+
+  // Call log
+  rows.push(["=== REGISTRO DE INTERACCIONES ==="]);
+  rows.push(["Fecha/Hora", "Sesion", "Cliente dice", "Agente responde", "Intencion", "Keywords"]);
+  (data.callLog || []).forEach((entry) => {
+    rows.push([
+      entry.timestamp,
+      entry.sessionId,
+      entry.userMessage,
+      entry.agentResponse,
+      entry.intent,
+      (entry.keywords || []).join("; "),
+    ]);
+  });
+
+  // Build CSV
+  const csvContent = rows
+    .map((row) =>
+      Array.isArray(row)
+        ? row.map((cell) => `"${String(cell ?? "").replace(/"/g, '""')}"`).join(",")
+        : `"${row}"`
+    )
+    .join("\n");
+
+  const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `fonda-alcala-metricas-${new Date().toISOString().split("T")[0]}.csv`;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
 /* ─── Main Component ─── */
 
 export default function MetricasPage() {
@@ -224,7 +294,11 @@ export default function MetricasPage() {
               Actualizado: {lastUpdated.toLocaleTimeString("es-ES")}
             </p>
           )}
-          <button className="inline-flex items-center gap-2 bg-gold text-white text-xs md:text-sm font-medium px-3 md:px-4 py-2 rounded-lg hover:bg-gold-dark transition-colors shadow-sm">
+          <button
+            onClick={() => exportToCSV(data)}
+            disabled={!data}
+            className="inline-flex items-center gap-2 bg-gold text-white text-xs md:text-sm font-medium px-3 md:px-4 py-2 rounded-lg hover:bg-gold-dark transition-colors shadow-sm disabled:opacity-50"
+          >
             <ExportIcon />
             Exportar
           </button>

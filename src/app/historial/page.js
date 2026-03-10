@@ -315,7 +315,10 @@ export default function HistorialPage() {
       .catch(() => setLoading(false));
   }, []);
 
-  const callLog = data?.callLog || [];
+  // Filter out useless "(inicio de llamada)" entries - they add no value
+  const callLog = (data?.callLog || []).filter(entry =>
+    entry.userMessage && entry.userMessage !== '(inicio de llamada)'
+  );
 
   /* ─── Computed Stats ─── */
   const stats = useMemo(() => {

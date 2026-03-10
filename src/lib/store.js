@@ -47,6 +47,11 @@ const KEYWORDS_MAP = {
   'privado': 'Sala Privada', 'sala privada': 'Sala Privada', 'reservado': 'Sala Privada',
   'ternasco': 'Ternasco', 'picasso': 'Les Perdius',
   'precio': 'Precios', 'precios': 'Precios',
+  'celíaco': 'Alergias', 'celiaca': 'Alergias', 'intolerancia': 'Alergias', 'intolerante': 'Alergias',
+  'marisco': 'Alergias', 'lactosa': 'Alergias', 'frutos secos': 'Alergias',
+  'cumple': 'Cumpleaños', 'comunión': 'Eventos', 'comunion': 'Eventos', 'bautizo': 'Eventos',
+  'trona': 'Niños', 'bebé': 'Niños', 'bebe': 'Niños',
+  'accesible': 'Accesibilidad', 'silla de ruedas': 'Accesibilidad', 'movilidad reducida': 'Accesibilidad',
 };
 
 export function detectKeywords(text) {
@@ -63,15 +68,19 @@ export function detectKeywords(text) {
 
 export function detectIntent(text) {
   const l = text.toLowerCase();
-  if (l.match(/reserv|mesa para|quiero mesa|disponibilidad/)) return 'reserva';
-  if (l.match(/cancel|anular|no puedo ir/)) return 'cancelación';
-  if (l.match(/modificar|cambiar.*reserva/)) return 'modificación';
-  if (l.match(/horario|abierto|cerrado|hora.*abr/)) return 'consulta_horario';
-  if (l.match(/carta|menú|menu|plato|comer|cenar|recomiend/)) return 'consulta_carta';
-  if (l.match(/dirección|dónde|donde.*está|llegar|ubicación/)) return 'consulta_ubicación';
+  // Check modification BEFORE reservation (more specific)
+  if (l.match(/modificar|cambiar.*reserva|mover.*reserva|reagendar|recolocar|cambiar.*hora|cambiar.*día|cambiar.*dia|mover.*mesa|pasar.*otro día|pasar.*otro dia/)) return 'modificación';
+  // Check cancellation (including colloquial expressions)
+  if (l.match(/cancel|anular|no puedo ir|quitar.*reserva|borrar.*reserva|no vamos a ir|al final no|olvídate|olvidate|no hace falta|se nos ha complicado|déjalo|dejalo/)) return 'cancelación';
+  // Check reservation (including colloquial expressions)
+  if (l.match(/reserv|mesa para|quiero mesa|disponibilidad|apartar mesa|coger sitio|guardar.*mesa|apuntarme|hay hueco|hay algo libre|hay sitio/)) return 'reserva';
+  if (l.match(/horario|abierto|cerrado|hora.*abr|qué días|que dias|cuándo abr|cuando abr/)) return 'consulta_horario';
+  if (l.match(/carta|menú|menu|plato|comer|cenar|recomiend|vegetarian|vegano|sin gluten|celíac|celiac|alérg|alerg/)) return 'consulta_carta';
+  if (l.match(/dirección|dónde|donde.*está|llegar|ubicación|ubicacion|cómo llego|como llego/)) return 'consulta_ubicación';
   if (l.match(/precio|cuánto|cuanto|cuesta/)) return 'consulta_precio';
-  if (l.match(/terraza|exterior/)) return 'consulta_terraza';
-  if (l.match(/evento|celebra|cumpleaños|grupo/)) return 'consulta_eventos';
+  if (l.match(/terraza|exterior|fuera/)) return 'consulta_terraza';
+  if (l.match(/evento|celebra|cumpleaños|grupo|boda|comunión|comunion|aniversario/)) return 'consulta_eventos';
+  if (l.match(/mascota|perro|gato|animal/)) return 'consulta_mascotas';
   return 'consulta_general';
 }
 

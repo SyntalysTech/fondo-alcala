@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 
 /* ────────────────────────────────────────────
    Status styling map
@@ -256,10 +256,39 @@ function ToastContainer({ toasts, onDismiss }) {
 /* ────────────────────────────────────────────
    Detail Panel (Slide-in overlay)
    ──────────────────────────────────────────── */
+function TrashIcon({ className = "w-4 h-4" }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+    </svg>
+  );
+}
+
 function DetailPanel({ reservation, onClose, onAction }) {
+  const [notesValue, setNotesValue] = useState(reservation?.notes || "");
+  const [notesSaving, setNotesSaving] = useState(false);
+  const [notesSaved, setNotesSaved] = useState(false);
+
   if (!reservation) return null;
 
   const styles = STATUS_STYLES[reservation.status] || STATUS_STYLES.pendiente;
+
+  const handleSaveNotes = async () => {
+    setNotesSaving(true);
+    try {
+      await fetch("/api/reservations", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: reservation.id, notes: notesValue }),
+      });
+      reservation.notes = notesValue;
+      setNotesSaved(true);
+      setTimeout(() => setNotesSaved(false), 2000);
+    } catch (e) {
+      console.error("Error saving notes:", e);
+    }
+    setNotesSaving(false);
+  };
 
   const timelineEvents = [
     {
@@ -393,6 +422,17 @@ function DetailPanel({ reservation, onClose, onAction }) {
                 Editar
               </button>
             </div>
+            <button
+              onClick={() => {
+                if (window.confirm("¿Eliminar esta reserva permanentemente?")) {
+                  onAction("delete", reservation.id);
+                }
+              }}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gray-50 hover:bg-red-50 text-gray-400 hover:text-red-600 font-medium text-sm transition-colors border border-gray-200 hover:border-red-200"
+            >
+              <TrashIcon className="w-4 h-4" />
+              Eliminar Reserva
+            </button>
           </div>
 
           {/* Timeline */}
@@ -425,9 +465,21 @@ function DetailPanel({ reservation, onClose, onAction }) {
             <textarea
               className="w-full rounded-xl border border-warm-border bg-cream/50 px-4 py-3 text-sm text-gray-700 placeholder-gray-400 resize-none focus:outline-none focus:ring-2 focus:ring-gold/40 focus:border-gold transition-shadow"
               rows={3}
-              defaultValue={reservation.notes || ""}
+              value={notesValue}
+              onChange={(e) => setNotesValue(e.target.value)}
               placeholder="Agregar notas sobre esta reserva..."
             />
+            <button
+              onClick={handleSaveNotes}
+              disabled={notesSaving}
+              className={`mt-2 w-full flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-colors ${
+                notesSaved
+                  ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                  : "bg-gold/10 hover:bg-gold/20 text-gold-dark border border-gold/30"
+              }`}
+            >
+              {notesSaving ? "Guardando..." : notesSaved ? "Guardado" : "Guardar notas"}
+            </button>
           </div>
         </div>
       </div>
@@ -624,6 +676,173 @@ function AnimationStyles() {
 }
 
 /* ────────────────────────────────────────────
+   Calendar View Component
+   ──────────────────────────────────────────── */
+function ChevronLeftIcon({ className = "w-4 h-4" }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+    </svg>
+  );
+}
+
+function ChevronRightIcon({ className = "w-4 h-4" }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+    </svg>
+  );
+}
+
+function CalendarViewIcon({ className = "w-5 h-5" }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5m-9-6h.008v.008H12v-.008zM12 15h.008v.008H12V15zm0 2.25h.008v.008H12v-.008zM9.75 15h.008v.008H9.75V15zm0 2.25h.008v.008H9.75v-.008zM7.5 15h.008v.008H7.5V15zm0 2.25h.008v.008H7.5v-.008zm6.75-4.5h.008v.008h-.008v-.008zm0 2.25h.008v.008h-.008V15zm0 2.25h.008v.008h-.008v-.008zm2.25-4.5h.008v.008H16.5v-.008zm0 2.25h.008v.008H16.5V15z" />
+    </svg>
+  );
+}
+
+function ListViewIcon({ className = "w-5 h-5" }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM3.75 12h.007v.008H3.75V12zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm-.375 5.25h.007v.008H3.75v-.008zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+    </svg>
+  );
+}
+
+function CalendarView({ reservations, onSelectReservation }) {
+  const [currentDate, setCurrentDate] = useState(new Date());
+
+  const year = currentDate.getFullYear();
+  const month = currentDate.getMonth();
+
+  const monthName = currentDate.toLocaleDateString("es-ES", { month: "long", year: "numeric" });
+
+  // Build calendar grid
+  const calendarDays = useMemo(() => {
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const startDayOfWeek = (firstDay.getDay() + 6) % 7; // Monday = 0
+    const daysInMonth = lastDay.getDate();
+
+    const days = [];
+    // Empty cells before first day
+    for (let i = 0; i < startDayOfWeek; i++) {
+      days.push(null);
+    }
+    // Actual days
+    for (let d = 1; d <= daysInMonth; d++) {
+      days.push(d);
+    }
+    return days;
+  }, [year, month]);
+
+  // Group reservations by date
+  const reservationsByDate = useMemo(() => {
+    const map = {};
+    reservations.forEach((r) => {
+      if (r.status === "cancelada") return;
+      const key = r.date;
+      if (!map[key]) map[key] = [];
+      map[key].push(r);
+    });
+    // Sort each day's reservations by time
+    Object.values(map).forEach((arr) => arr.sort((a, b) => a.time.localeCompare(b.time)));
+    return map;
+  }, [reservations]);
+
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+
+  const prevMonth = () => setCurrentDate(new Date(year, month - 1, 1));
+  const nextMonth = () => setCurrentDate(new Date(year, month + 1, 1));
+  const goToday = () => setCurrentDate(new Date());
+
+  const dayNames = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
+
+  return (
+    <div className="bg-white rounded-xl border border-warm-border overflow-hidden">
+      {/* Calendar header */}
+      <div className="flex items-center justify-between px-4 py-3 border-b border-warm-border bg-cream/30">
+        <button onClick={prevMonth} className="p-1.5 rounded-lg hover:bg-cream-dark transition-colors">
+          <ChevronLeftIcon />
+        </button>
+        <div className="flex items-center gap-3">
+          <h3 className="font-serif font-bold text-gray-800 capitalize text-lg">{monthName}</h3>
+          <button onClick={goToday} className="text-xs text-gold-dark font-medium px-2 py-0.5 rounded-full bg-gold/10 hover:bg-gold/20 transition-colors">
+            Hoy
+          </button>
+        </div>
+        <button onClick={nextMonth} className="p-1.5 rounded-lg hover:bg-cream-dark transition-colors">
+          <ChevronRightIcon />
+        </button>
+      </div>
+
+      {/* Day names header */}
+      <div className="grid grid-cols-7 border-b border-warm-border">
+        {dayNames.map((d) => (
+          <div key={d} className="text-center text-xs font-semibold text-gray-400 uppercase tracking-wider py-2">
+            {d}
+          </div>
+        ))}
+      </div>
+
+      {/* Calendar grid */}
+      <div className="grid grid-cols-7">
+        {calendarDays.map((day, idx) => {
+          if (day === null) {
+            return <div key={`empty-${idx}`} className="min-h-[80px] md:min-h-[100px] border-b border-r border-warm-border/50 bg-gray-50/30" />;
+          }
+
+          const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+          const dayReservations = reservationsByDate[dateStr] || [];
+          const isToday = dateStr === todayStr;
+          const isPast = dateStr < todayStr;
+          const dayOfWeek = new Date(year, month, day).getDay();
+          const isMonday = dayOfWeek === 1;
+
+          return (
+            <div
+              key={day}
+              className={`min-h-[80px] md:min-h-[100px] border-b border-r border-warm-border/50 p-1 transition-colors ${
+                isToday ? "bg-gold/5" : isPast ? "bg-gray-50/50" : "bg-white"
+              } ${isMonday ? "bg-red-50/30" : ""}`}
+            >
+              <div className="flex items-center justify-between px-1">
+                <span className={`text-xs font-semibold ${isToday ? "bg-gold text-white w-6 h-6 rounded-full flex items-center justify-center" : isPast ? "text-gray-300" : "text-gray-600"}`}>
+                  {day}
+                </span>
+                {dayReservations.length > 0 && (
+                  <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full">
+                    {dayReservations.length}
+                  </span>
+                )}
+              </div>
+              <div className="mt-1 space-y-0.5 overflow-y-auto max-h-[60px] md:max-h-[75px]">
+                {dayReservations.map((r) => (
+                  <button
+                    key={r.id}
+                    onClick={() => onSelectReservation(r)}
+                    className={`w-full text-left px-1.5 py-0.5 rounded text-[10px] md:text-[11px] truncate transition-colors ${
+                      r.status === "confirmada"
+                        ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                        : "bg-amber-50 text-amber-700 hover:bg-amber-100"
+                    }`}
+                    title={`${r.time} - ${r.name} (${r.guests}p)`}
+                  >
+                    <span className="font-semibold">{r.time}</span> {r.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ────────────────────────────────────────────
    MAIN PAGE
    ──────────────────────────────────────────── */
 export default function ReservasPage() {
@@ -635,6 +854,7 @@ export default function ReservasPage() {
   const [search, setSearch] = useState("");
   const [selectedReservation, setSelectedReservation] = useState(null);
   const [toasts, setToasts] = useState([]);
+  const [viewMode, setViewMode] = useState("list"); // "list" | "calendar"
 
   useEffect(() => {
     fetch("/api/metrics")
@@ -674,6 +894,11 @@ export default function ReservasPage() {
           addToast("Reserva confirmada correctamente", "success");
           break;
         case "cancel":
+          fetch("/api/reservations", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id: reservationId, status: "cancelada" }),
+          }).catch(() => {});
           setReservations((prev) =>
             prev.map((r) => (r.id === reservationId ? { ...r, status: "cancelada" } : r))
           );
@@ -691,6 +916,19 @@ export default function ReservasPage() {
         case "edit":
           addToast("Modo de edicion (demo)", "info");
           break;
+        case "delete":
+          fetch("/api/reservations", {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id: reservationId }),
+          })
+            .then(() => {
+              setReservations((prev) => prev.filter((r) => r.id !== reservationId));
+              setSelectedReservation(null);
+              addToast("Reserva eliminada permanentemente", "success");
+            })
+            .catch(() => addToast("Error al eliminar la reserva", "error"));
+          break;
         default:
           break;
       }
@@ -704,12 +942,21 @@ export default function ReservasPage() {
   const pending = reservations.filter((r) => r.status === "pendiente").length;
   const cancelled = reservations.filter((r) => r.status === "cancelada").length;
 
-  /* Filtered & searched reservations */
-  const filteredReservations = reservations.filter((r) => {
-    if (filter !== "todas" && r.status !== filter) return false;
-    if (search.trim() && !r.name.toLowerCase().includes(search.toLowerCase())) return false;
-    return true;
-  });
+  /* Filtered, searched & sorted reservations (nearest arrival first) */
+  const filteredReservations = reservations
+    .filter((r) => {
+      if (filter !== "todas" && r.status !== filter) return false;
+      if (search.trim() && !r.name.toLowerCase().includes(search.toLowerCase())) return false;
+      return true;
+    })
+    .sort((a, b) => {
+      // Sort by date+time ascending (nearest first), cancelled at the end
+      if (a.status === "cancelada" && b.status !== "cancelada") return 1;
+      if (a.status !== "cancelada" && b.status === "cancelada") return -1;
+      const dateA = `${a.date}T${a.time}`;
+      const dateB = `${b.date}T${b.time}`;
+      return dateA.localeCompare(dateB);
+    });
 
   /* Filtered clients */
   const filteredClients = clients.filter((c) => {
@@ -817,22 +1064,41 @@ export default function ReservasPage() {
             </button>
           </div>
 
-          {/* Filter pills (reservas only) */}
+          {/* Filter pills + view toggle (reservas only) */}
           {activeTab === "reservas" && (
-            <div className="inline-flex flex-wrap bg-white rounded-xl border border-warm-border p-1 gap-0.5">
-              {FILTER_OPTIONS.map((opt) => (
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="inline-flex flex-wrap bg-white rounded-xl border border-warm-border p-1 gap-0.5">
+                {FILTER_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.key}
+                    onClick={() => setFilter(opt.key)}
+                    className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                      filter === opt.key
+                        ? "bg-cream-dark text-gray-800 shadow-sm"
+                        : "text-gray-400 hover:text-gray-600"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+              {/* View toggle */}
+              <div className="inline-flex bg-white rounded-xl border border-warm-border p-1">
                 <button
-                  key={opt.key}
-                  onClick={() => setFilter(opt.key)}
-                  className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                    filter === opt.key
-                      ? "bg-cream-dark text-gray-800 shadow-sm"
-                      : "text-gray-400 hover:text-gray-600"
-                  }`}
+                  onClick={() => setViewMode("list")}
+                  className={`p-1.5 rounded-lg transition-all ${viewMode === "list" ? "bg-cream-dark text-gray-800 shadow-sm" : "text-gray-400 hover:text-gray-600"}`}
+                  title="Vista lista"
                 >
-                  {opt.label}
+                  <ListViewIcon className="w-4 h-4" />
                 </button>
-              ))}
+                <button
+                  onClick={() => setViewMode("calendar")}
+                  className={`p-1.5 rounded-lg transition-all ${viewMode === "calendar" ? "bg-cream-dark text-gray-800 shadow-sm" : "text-gray-400 hover:text-gray-600"}`}
+                  title="Vista calendario"
+                >
+                  <CalendarViewIcon className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -864,31 +1130,40 @@ export default function ReservasPage() {
         {/* ── Content Area ── */}
         {activeTab === "reservas" && (
           <div>
-            <div className="flex items-center justify-between mb-4">
-              <p className="text-sm text-gray-500">
-                {filteredReservations.length}{" "}
-                {filteredReservations.length === 1 ? "reserva" : "reservas"}
-                {filter !== "todas" && ` ${FILTER_OPTIONS.find((o) => o.key === filter)?.label?.toLowerCase()}`}
-                {search && ` para "${search}"`}
-              </p>
-            </div>
-
-            {filteredReservations.length === 0 ? (
-              <div className="rounded-xl border border-warm-border bg-white p-12 text-center">
-                <ClipboardIcon className="w-10 h-10 text-gray-300 mx-auto mb-3" />
-                <p className="text-sm text-gray-400 font-medium">No se encontraron reservas</p>
-                <p className="text-xs text-gray-300 mt-1">Prueba con otros filtros o terminos de busqueda</p>
-              </div>
+            {viewMode === "calendar" ? (
+              <CalendarView
+                reservations={reservations}
+                onSelectReservation={(r) => setSelectedReservation(r)}
+              />
             ) : (
-              <div className="space-y-3">
-                {filteredReservations.map((r) => (
-                  <ReservationCard
-                    key={r.id}
-                    reservation={r}
-                    onClick={() => setSelectedReservation(r)}
-                  />
-                ))}
-              </div>
+              <>
+                <div className="flex items-center justify-between mb-4">
+                  <p className="text-sm text-gray-500">
+                    {filteredReservations.length}{" "}
+                    {filteredReservations.length === 1 ? "reserva" : "reservas"}
+                    {filter !== "todas" && ` ${FILTER_OPTIONS.find((o) => o.key === filter)?.label?.toLowerCase()}`}
+                    {search && ` para "${search}"`}
+                  </p>
+                </div>
+
+                {filteredReservations.length === 0 ? (
+                  <div className="rounded-xl border border-warm-border bg-white p-12 text-center">
+                    <ClipboardIcon className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+                    <p className="text-sm text-gray-400 font-medium">No se encontraron reservas</p>
+                    <p className="text-xs text-gray-300 mt-1">Prueba con otros filtros o terminos de busqueda</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {filteredReservations.map((r) => (
+                      <ReservationCard
+                        key={r.id}
+                        reservation={r}
+                        onClick={() => setSelectedReservation(r)}
+                      />
+                    ))}
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}
