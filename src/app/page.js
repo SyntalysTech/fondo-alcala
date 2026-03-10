@@ -21,6 +21,8 @@ export default function AgentPage() {
   const scrollRef = useRef(null);
   const inCallRef = useRef(false);
   const statusRef = useRef("idle");
+  const audioRef = useRef(null);
+  const sendRef = useRef(null);
 
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -88,7 +90,7 @@ export default function AgentPage() {
     analyserRef.current = null;
   };
 
-  // Speech recognition with auto-restart
+  // Speech recognition with auto-restart — uses sendRef to always call latest send
   const startListening = useCallback(() => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) return;
@@ -109,7 +111,7 @@ export default function AgentPage() {
       if (final) {
         silenceRef.current = setTimeout(() => {
           const t = final.trim();
-          if (t) { intentionalStop = true; try { r.stop(); } catch (e) {} send(t); }
+          if (t) { intentionalStop = true; try { r.stop(); } catch (e) {} sendRef.current(t); }
           final = "";
         }, 150);
       }
@@ -125,13 +127,18 @@ export default function AgentPage() {
     try { r.start(); setStatus("listening"); statusRef.current = "listening"; } catch (e) {}
   }, []);
 
-  // Fetch TTS for a sentence and return as Blob
-  const fetchSentenceTTS = (sentence) =>
-    fetch("/api/tts", {
+  // Fetch TTS for a sentence and return as Blob (with 8s timeout)
+  const fetchSentenceTTS = (sentence) => {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    return fetch("/api/tts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text: sentence }),
-    }).then(r => r.ok ? r.blob() : null).catch(() => null);
+      signal: controller.signal,
+    }).then(r => { clearTimeout(timeout); return r.ok ? r.blob() : null; })
+      .catch(() => { clearTimeout(timeout); return null; });
+  };
 
   // Play a single audio Blob, returns promise that resolves when done
   const playBlob = (blob) =>
@@ -147,14 +154,19 @@ export default function AgentPage() {
       audio.play().catch(done);
     });
 
-  // Send message (streaming SSE + overlapped sentence-level TTS)
+  const addAgent = (text, kws, intent) => {
+    const time = new Date().toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
+    setMessages(prev => [...prev, { role: "agent", text, time, keywords: kws, intent }]);
+  };
+
+  // Send message (streaming SSE + overlapped sentence-level TTS via promise chain)
   const send = async (text) => {
     const time = new Date().toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
     setMessages(prev => [...prev, { role: "user", text, time }]);
     setStatus("processing"); statusRef.current = "processing";
     setTyping(true);
 
-    // Stop recognition immediately to prevent re-triggers
+    // Stop recognition immediately
     if (recogRef.current) try { recogRef.current.abort(); } catch (e) {}
 
     try {
@@ -168,31 +180,23 @@ export default function AgentPage() {
       const decoder = new TextDecoder();
       let buf = "", fullText = "", meta = null;
       let sentenceBuf = "";
-      const sentenceAudios = []; // Promise<Blob>[]
-      let streamDone = false;
 
-      // Queue a sentence for TTS immediately (parallel fetch)
+      // Promise chain: each sentence's TTS starts immediately, playback is sequential
+      let playChain = Promise.resolve();
+      let isFirstSentence = true;
+
       const queueSentenceTTS = (sentence) => {
-        sentenceAudios.push(fetchSentenceTTS(sentence));
-      };
-
-      // Playback loop — runs concurrently with stream reading
-      // Plays each sentence's audio as soon as its TTS blob resolves
-      const playbackPromise = (async () => {
-        let i = 0;
-        while (true) {
-          if (i < sentenceAudios.length) {
-            if (i === 0) { setStatus("speaking"); statusRef.current = "speaking"; }
-            const blob = await sentenceAudios[i];
-            if (blob && inCallRef.current) await playBlob(blob);
-            i++;
-          } else if (streamDone) {
-            break;
-          } else {
-            await new Promise(r => setTimeout(r, 30));
+        const ttsPromise = fetchSentenceTTS(sentence);
+        playChain = playChain.then(async () => {
+          if (!inCallRef.current) return;
+          if (isFirstSentence) {
+            isFirstSentence = false;
+            setStatus("speaking"); statusRef.current = "speaking";
           }
-        }
-      })();
+          const blob = await ttsPromise;
+          if (blob && inCallRef.current) await playBlob(blob);
+        });
+      };
 
       // Read SSE stream and detect sentence boundaries in real-time
       while (true) {
@@ -221,7 +225,6 @@ export default function AgentPage() {
 
       // Flush remaining text as final sentence
       if (sentenceBuf.trim()) queueSentenceTTS(sentenceBuf.trim());
-      streamDone = true;
 
       setTyping(false);
       if (!meta || !fullText) {
@@ -233,9 +236,9 @@ export default function AgentPage() {
       addAgent(fullText, meta.keywords, meta.intent);
 
       // Wait for all audio playback to finish
-      await playbackPromise;
+      await playChain;
 
-      // Auto hang up ONLY on clear farewell phrases (not partial matches)
+      // Auto hang up ONLY on clear farewell phrases
       const lower = fullText.toLowerCase();
       if (/les esperamos|os esperamos|hasta luego|adiós|que vaya bien/.test(lower)) {
         setTimeout(() => endCall(), 1500);
@@ -253,102 +256,58 @@ export default function AgentPage() {
     }
   };
 
-  const addAgent = (text, kws, intent) => {
-    const time = new Date().toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
-    setMessages(prev => [...prev, { role: "agent", text, time, keywords: kws, intent }]);
-  };
+  // Keep sendRef always pointing to latest send
+  sendRef.current = send;
 
-  // Audio element ref for OpenAI TTS playback
-  const audioRef = useRef(null);
-
-  // Play TTS via OpenAI API (high-quality voice, works on all browsers)
+  // Play TTS via OpenAI API (used for greeting)
   const playTTS = (text) => {
     if (recogRef.current) try { recogRef.current.abort(); } catch (e) {}
     setStatus("speaking"); statusRef.current = "speaking";
-
-    // Stop any currently playing audio
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.currentTime = 0;
-    }
+    if (audioRef.current) { audioRef.current.pause(); audioRef.current.currentTime = 0; }
 
     return new Promise((resolve) => {
       const audio = new Audio(`/api/tts?text=${encodeURIComponent(text)}`);
       audioRef.current = audio;
-
       let resolved = false;
       const done = () => { if (!resolved) { resolved = true; resolve(); } };
-
       audio.onended = done;
       audio.onerror = () => {
-        console.warn("TTS API error, falling back to browser speech");
-        // Fallback to browser TTS if API fails
         const utt = new SpeechSynthesisUtterance(text);
-        utt.lang = "es-ES";
-        utt.rate = 1.0;
-        utt.onend = done;
-        utt.onerror = done;
+        utt.lang = "es-ES"; utt.rate = 1.0;
+        utt.onend = done; utt.onerror = done;
         setTimeout(done, 15000);
         window.speechSynthesis.speak(utt);
       };
-
-      // Safety timeout: max 30 seconds
       setTimeout(done, 30000);
-
-      audio.play().catch(() => {
-        // Autoplay blocked — fallback
-        done();
-      });
+      audio.play().catch(done);
     });
   };
 
-  // Pre-cache greeting TTS blob so call start is instant
-  const greetingBlobRef = useRef(null);
-  const GREETING = "Hola, buenas, le atiende Elena desde Fonda Alcalá. ¿En qué puedo ayudarle?";
+  // Unlock audio context on first user interaction
+  const unlockAudio = () => { const a = new Audio(); a.play().catch(() => {}); };
 
-  // Pre-warm: fetch greeting TTS + establish OpenAI connection on mount
-  useEffect(() => {
-    fetch("/api/tts", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: GREETING }),
-    }).then(r => r.ok ? r.blob() : null).then(blob => {
-      greetingBlobRef.current = blob;
-    }).catch(() => {});
-  }, []);
-
-  // Unlock audio context on first user interaction (needed for autoplay policies)
-  const unlockAudio = () => {
-    const audio = new Audio();
-    audio.play().catch(() => {});
-  };
-
-  // Start call — uses /api/init-call to sync conversation with hardcoded greeting
+  // Start call
   const startCall = async () => {
     unlockAudio();
     sessionRef.current = "call_" + Date.now();
     setInCall(true); inCallRef.current = true;
     setMessages([]); setShowTranscript(true);
     setStatus("processing"); statusRef.current = "processing";
-    await initMic();
 
-    addAgent(GREETING);
+    const greeting = "Hola, buenas, le atiende Elena desde Fonda Alcalá. ¿En qué puedo ayudarle?";
+    addAgent(greeting);
 
-    // Register session with the EXACT greeting (keeps conversation in sync)
-    fetch("/api/init-call", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sessionId: sessionRef.current }),
-    }).catch(() => {});
+    // Register session AND init mic in parallel (both must complete before listening)
+    await Promise.all([
+      initMic(),
+      fetch("/api/init-call", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId: sessionRef.current }),
+      }).catch(() => {}),
+    ]);
 
-    // Use pre-cached greeting blob if available (instant), otherwise fetch
-    if (greetingBlobRef.current) {
-      if (recogRef.current) try { recogRef.current.abort(); } catch (e) {}
-      setStatus("speaking"); statusRef.current = "speaking";
-      await playBlob(greetingBlobRef.current);
-    } else {
-      await playTTS(GREETING);
-    }
+    await playTTS(greeting);
     setStatus("listening"); statusRef.current = "listening";
     startListening();
   };
