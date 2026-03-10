@@ -1,16 +1,35 @@
-import OpenAI from 'openai';
-
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
+const VOICE_ID = process.env.ELEVENLABS_VOICE_ID || 'XrExE9yKIg1WjnnlVkGX'; // Matilde — warm Spanish female
 
 async function generateSpeech(text) {
-  const mp3 = await openai.audio.speech.create({
-    model: 'tts-1',
-    voice: 'nova',
-    input: text,
-    speed: 1.12,
-    response_format: 'mp3',
-  });
-  return new Response(mp3.body, {
+  const res = await fetch(
+    `https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}?output_format=mp3_44100_128`,
+    {
+      method: 'POST',
+      headers: {
+        'xi-api-key': ELEVENLABS_API_KEY,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        text,
+        model_id: 'eleven_turbo_v2_5',
+        voice_settings: {
+          stability: 0.55,
+          similarity_boost: 0.78,
+          style: 0.35,
+          use_speaker_boost: true,
+        },
+      }),
+    }
+  );
+
+  if (!res.ok) {
+    const err = await res.text();
+    console.error('ElevenLabs TTS error:', res.status, err);
+    return Response.json({ error: 'TTS failed' }, { status: 502 });
+  }
+
+  return new Response(res.body, {
     headers: {
       'Content-Type': 'audio/mpeg',
       'Cache-Control': 'no-cache',
@@ -29,7 +48,7 @@ export async function GET(req) {
   }
 }
 
-// POST endpoint for sentence-level streaming TTS (avoids URL length limits)
+// POST endpoint for sentence-level streaming TTS
 export async function POST(req) {
   try {
     const { text } = await req.json();
