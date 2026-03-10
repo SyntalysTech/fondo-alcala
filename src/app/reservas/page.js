@@ -500,6 +500,219 @@ function DetailItem({ icon, label, value }) {
 }
 
 /* ────────────────────────────────────────────
+   Edit / Create Reservation Modal
+   ──────────────────────────────────────────── */
+function ReservationFormModal({ reservation, onClose, onSave }) {
+  const isEdit = !!reservation;
+  const [form, setForm] = useState({
+    name: reservation?.name || "",
+    date: reservation?.date || "",
+    time: reservation?.time || "",
+    guests: reservation?.guests || 2,
+    phone: reservation?.phone || "",
+    notes: reservation?.notes || "",
+    status: reservation?.status || "confirmada",
+  });
+  const [saving, setSaving] = useState(false);
+  const [errors, setErrors] = useState({});
+
+  const validate = () => {
+    const e = {};
+    if (!form.name.trim()) e.name = "Nombre obligatorio";
+    if (!form.date) e.date = "Fecha obligatoria";
+    if (!form.time) e.time = "Hora obligatoria";
+    if (!form.guests || form.guests < 1) e.guests = "Min. 1 comensal";
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!validate()) return;
+    setSaving(true);
+    try {
+      if (isEdit) {
+        const res = await fetch("/api/reservations", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: reservation.id, ...form, guests: Number(form.guests) }),
+        });
+        const data = await res.json();
+        if (data.success) onSave({ ...reservation, ...form, guests: Number(form.guests) });
+      } else {
+        const res = await fetch("/api/reservations", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(form),
+        });
+        const data = await res.json();
+        if (data.success) onSave(data.reservation);
+      }
+    } catch (err) {
+      console.error("Error saving reservation:", err);
+    }
+    setSaving(false);
+  };
+
+  const update = (field, value) => {
+    setForm((prev) => ({ ...prev, [field]: value }));
+    if (errors[field]) setErrors((prev) => ({ ...prev, [field]: undefined }));
+  };
+
+  return (
+    <>
+      <div className="fixed inset-0 bg-black/40 z-40" onClick={onClose} />
+      <div className="fixed inset-0 md:inset-auto md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:w-full md:max-w-[520px] md:max-h-[90vh] bg-white z-50 shadow-2xl md:rounded-2xl overflow-y-auto animate-slide-panel">
+        {/* Header */}
+        <div className="sticky top-0 bg-white border-b border-warm-border px-6 py-4 flex items-center justify-between z-10">
+          <h2 className="font-serif text-xl font-bold text-gray-900">
+            {isEdit ? "Editar Reserva" : "Nueva Reserva"}
+          </h2>
+          <button onClick={onClose} className="p-2 rounded-lg hover:bg-cream transition-colors text-gray-500 hover:text-gray-800">
+            <XIcon />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="px-6 py-6 space-y-5">
+          {/* Name */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Nombre del cliente *</label>
+            <input
+              type="text"
+              value={form.name}
+              onChange={(e) => update("name", e.target.value)}
+              className={`w-full px-4 py-2.5 rounded-xl border text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-gold/40 transition-shadow ${errors.name ? "border-red-300 bg-red-50/30" : "border-warm-border bg-white"}`}
+              placeholder="Ej: María García"
+            />
+            {errors.name && <p className="text-xs text-red-500 mt-1">{errors.name}</p>}
+          </div>
+
+          {/* Date + Time row */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Fecha *</label>
+              <input
+                type="date"
+                value={form.date}
+                onChange={(e) => update("date", e.target.value)}
+                className={`w-full px-4 py-2.5 rounded-xl border text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-gold/40 transition-shadow ${errors.date ? "border-red-300 bg-red-50/30" : "border-warm-border bg-white"}`}
+              />
+              {errors.date && <p className="text-xs text-red-500 mt-1">{errors.date}</p>}
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Hora *</label>
+              <input
+                type="time"
+                value={form.time}
+                onChange={(e) => update("time", e.target.value)}
+                className={`w-full px-4 py-2.5 rounded-xl border text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-gold/40 transition-shadow ${errors.time ? "border-red-300 bg-red-50/30" : "border-warm-border bg-white"}`}
+              />
+              {errors.time && <p className="text-xs text-red-500 mt-1">{errors.time}</p>}
+            </div>
+          </div>
+
+          {/* Guests + Phone row */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Comensales *</label>
+              <input
+                type="number"
+                min={1}
+                max={50}
+                value={form.guests}
+                onChange={(e) => update("guests", e.target.value)}
+                className={`w-full px-4 py-2.5 rounded-xl border text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-gold/40 transition-shadow ${errors.guests ? "border-red-300 bg-red-50/30" : "border-warm-border bg-white"}`}
+              />
+              {errors.guests && <p className="text-xs text-red-500 mt-1">{errors.guests}</p>}
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Telefono</label>
+              <input
+                type="tel"
+                value={form.phone}
+                onChange={(e) => update("phone", e.target.value)}
+                className="w-full px-4 py-2.5 rounded-xl border border-warm-border bg-white text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-gold/40 transition-shadow"
+                placeholder="+34 612 345 678"
+              />
+            </div>
+          </div>
+
+          {/* Status */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Estado</label>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => update("status", "confirmada")}
+                className={`flex-1 px-3 py-2 rounded-xl text-xs font-semibold transition-all border ${
+                  form.status === "confirmada"
+                    ? "bg-emerald-50 text-emerald-700 border-emerald-300 ring-2 ring-emerald-200"
+                    : "bg-white text-gray-400 border-warm-border hover:bg-cream"
+                }`}
+              >
+                Confirmada
+              </button>
+              <button
+                type="button"
+                onClick={() => update("status", "pendiente")}
+                className={`flex-1 px-3 py-2 rounded-xl text-xs font-semibold transition-all border ${
+                  form.status === "pendiente"
+                    ? "bg-amber-50 text-amber-700 border-amber-300 ring-2 ring-amber-200"
+                    : "bg-white text-gray-400 border-warm-border hover:bg-cream"
+                }`}
+              >
+                Pendiente
+              </button>
+              <button
+                type="button"
+                onClick={() => update("status", "cancelada")}
+                className={`flex-1 px-3 py-2 rounded-xl text-xs font-semibold transition-all border ${
+                  form.status === "cancelada"
+                    ? "bg-red-50 text-red-700 border-red-300 ring-2 ring-red-200"
+                    : "bg-white text-gray-400 border-warm-border hover:bg-cream"
+                }`}
+              >
+                Cancelada
+              </button>
+            </div>
+          </div>
+
+          {/* Notes */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Notas</label>
+            <textarea
+              rows={3}
+              value={form.notes}
+              onChange={(e) => update("notes", e.target.value)}
+              className="w-full px-4 py-3 rounded-xl border border-warm-border bg-white text-sm text-gray-700 placeholder-gray-400 resize-none focus:outline-none focus:ring-2 focus:ring-gold/40 transition-shadow"
+              placeholder="Ej: Terraza si es posible, cumpleaños..."
+            />
+          </div>
+
+          {/* Action buttons */}
+          <div className="flex gap-3 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 px-4 py-2.5 rounded-xl bg-gray-50 hover:bg-gray-100 text-gray-600 font-medium text-sm transition-colors border border-gray-200"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="flex-1 px-4 py-2.5 rounded-xl bg-gold hover:bg-gold-dark text-white font-semibold text-sm transition-colors shadow-sm disabled:opacity-50"
+            >
+              {saving ? "Guardando..." : isEdit ? "Guardar Cambios" : "Crear Reserva"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </>
+  );
+}
+
+/* ────────────────────────────────────────────
    Reservation Card
    ──────────────────────────────────────────── */
 function ReservationCard({ reservation, onClick }) {
@@ -855,6 +1068,8 @@ export default function ReservasPage() {
   const [selectedReservation, setSelectedReservation] = useState(null);
   const [toasts, setToasts] = useState([]);
   const [viewMode, setViewMode] = useState("list"); // "list" | "calendar"
+  const [editingReservation, setEditingReservation] = useState(null); // reservation object for editing
+  const [showCreateForm, setShowCreateForm] = useState(false);
 
   useEffect(() => {
     fetch("/api/metrics")
@@ -913,9 +1128,14 @@ export default function ReservasPage() {
         case "call":
           addToast("Iniciando llamada al cliente...", "info");
           break;
-        case "edit":
-          addToast("Modo de edicion (demo)", "info");
+        case "edit": {
+          const toEdit = reservations.find((r) => r.id === reservationId);
+          if (toEdit) {
+            setSelectedReservation(null);
+            setEditingReservation(toEdit);
+          }
           break;
+        }
         case "delete":
           fetch("/api/reservations", {
             method: "DELETE",
@@ -932,6 +1152,28 @@ export default function ReservasPage() {
         default:
           break;
       }
+    },
+    [addToast]
+  );
+
+  /* Handle edit save */
+  const handleEditSave = useCallback(
+    (updated) => {
+      setReservations((prev) =>
+        prev.map((r) => (r.id === updated.id ? updated : r))
+      );
+      setEditingReservation(null);
+      addToast("Reserva actualizada correctamente", "success");
+    },
+    [addToast]
+  );
+
+  /* Handle create save */
+  const handleCreateSave = useCallback(
+    (newRes) => {
+      setReservations((prev) => [...prev, newRes]);
+      setShowCreateForm(false);
+      addToast(`Reserva para ${newRes.name} creada correctamente`, "success");
     },
     [addToast]
   );
@@ -989,6 +1231,24 @@ export default function ReservasPage() {
         />
       )}
 
+      {/* Edit Modal */}
+      {editingReservation && (
+        <ReservationFormModal
+          reservation={editingReservation}
+          onClose={() => setEditingReservation(null)}
+          onSave={handleEditSave}
+        />
+      )}
+
+      {/* Create Modal */}
+      {showCreateForm && (
+        <ReservationFormModal
+          reservation={null}
+          onClose={() => setShowCreateForm(false)}
+          onSave={handleCreateSave}
+        />
+      )}
+
       <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 md:py-8">
         {/* ── Header ── */}
         <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-6 md:mb-8">
@@ -998,7 +1258,10 @@ export default function ReservasPage() {
               Administra reservas y clientes del restaurante
             </p>
           </div>
-          <button className="inline-flex items-center gap-2 px-4 py-2 md:px-5 md:py-2.5 rounded-xl bg-gold hover:bg-gold-dark text-white font-semibold text-xs md:text-sm transition-colors shadow-sm">
+          <button
+            onClick={() => setShowCreateForm(true)}
+            className="inline-flex items-center gap-2 px-4 py-2 md:px-5 md:py-2.5 rounded-xl bg-gold hover:bg-gold-dark text-white font-semibold text-xs md:text-sm transition-colors shadow-sm"
+          >
             <PlusIcon />
             Nueva Reserva
           </button>

@@ -21,7 +21,6 @@ export default function AgentPage() {
   const scrollRef = useRef(null);
   const inCallRef = useRef(false);
   const statusRef = useRef("idle");
-  const speakTimerRef = useRef(null);
 
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -193,63 +192,54 @@ export default function AgentPage() {
     setMessages(prev => [...prev, { role: "agent", text, time, keywords: kws, intent }]);
   };
 
-  // Voice selection (cached)
-  const voiceRef = useRef(null);
-  const getVoice = () => {
-    if (voiceRef.current) return voiceRef.current;
-    const voices = window.speechSynthesis.getVoices();
-    const pick = voices.find(v => v.lang === "es-ES" && v.name.toLowerCase().includes("google"))
-      || voices.find(v => v.lang === "es-ES" && v.name.toLowerCase().includes("enhanced"))
-      || voices.find(v => v.lang === "es-ES" && !v.localService)
-      || voices.find(v => v.lang === "es-ES")
-      || voices.find(v => v.lang.startsWith("es"));
-    if (pick) voiceRef.current = pick;
-    return pick;
-  };
+  // Audio element ref for OpenAI TTS playback
+  const audioRef = useRef(null);
 
-  // TTS with Chrome safety timeout (Chrome bug: onend sometimes doesn't fire)
+  // Play TTS via OpenAI API (high-quality voice, works on all browsers)
   const playTTS = (text) => {
     if (recogRef.current) try { recogRef.current.abort(); } catch (e) {}
     setStatus("speaking"); statusRef.current = "speaking";
-    window.speechSynthesis.cancel();
-    clearInterval(speakTimerRef.current);
+
+    // Stop any currently playing audio
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
 
     return new Promise((resolve) => {
-      const utt = new SpeechSynthesisUtterance(text);
-      utt.lang = "es-ES";
-      utt.rate = 1.0;
-      utt.pitch = 1.1;
-      utt.volume = 1.0;
-      const v = getVoice();
-      if (v) utt.voice = v;
+      const audio = new Audio(`/api/tts?text=${encodeURIComponent(text)}`);
+      audioRef.current = audio;
 
       let resolved = false;
-      const done = () => { if (!resolved) { resolved = true; clearInterval(speakTimerRef.current); resolve(); } };
+      const done = () => { if (!resolved) { resolved = true; resolve(); } };
 
-      utt.onend = done;
-      utt.onerror = done;
+      audio.onended = done;
+      audio.onerror = () => {
+        console.warn("TTS API error, falling back to browser speech");
+        // Fallback to browser TTS if API fails
+        const utt = new SpeechSynthesisUtterance(text);
+        utt.lang = "es-ES";
+        utt.rate = 1.0;
+        utt.onend = done;
+        utt.onerror = done;
+        setTimeout(done, 15000);
+        window.speechSynthesis.speak(utt);
+      };
 
-      // Chrome bug: speechSynthesis pauses after ~15s and onend never fires
-      // Keep it alive with resume() and add safety timeout
-      speakTimerRef.current = setInterval(() => {
-        if (!window.speechSynthesis.speaking) { done(); return; }
-        window.speechSynthesis.pause();
-        window.speechSynthesis.resume();
-      }, 5000);
+      // Safety timeout: max 30 seconds
+      setTimeout(done, 30000);
 
-      // Safety timeout: max 20 seconds of speaking
-      setTimeout(done, 20000);
-
-      window.speechSynthesis.speak(utt);
+      audio.play().catch(() => {
+        // Autoplay blocked — fallback
+        done();
+      });
     });
   };
 
+  // Unlock audio context on first user interaction (needed for autoplay policies)
   const unlockAudio = () => {
-    window.speechSynthesis.cancel();
-    window.speechSynthesis.getVoices();
-    const utt = new SpeechSynthesisUtterance("");
-    utt.volume = 0;
-    window.speechSynthesis.speak(utt);
+    const audio = new Audio();
+    audio.play().catch(() => {});
   };
 
   // Start call — uses /api/init-call to sync conversation with hardcoded greeting
@@ -279,9 +269,9 @@ export default function AgentPage() {
   const endCall = () => {
     inCallRef.current = false;
     clearTimeout(silenceRef.current);
-    clearInterval(speakTimerRef.current);
     if (recogRef.current) try { recogRef.current.abort(); } catch (e) {}
     recogRef.current = null;
+    if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
     window.speechSynthesis?.cancel();
     stopMic();
     setInCall(false);
@@ -294,16 +284,12 @@ export default function AgentPage() {
   };
 
   useEffect(() => {
-    window.speechSynthesis?.getVoices();
-    const onVoices = () => getVoice();
-    window.speechSynthesis?.addEventListener?.("voiceschanged", onVoices);
     return () => {
       clearInterval(timerRef.current);
       clearTimeout(silenceRef.current);
-      clearInterval(speakTimerRef.current);
       if (recogRef.current) try { recogRef.current.stop(); } catch (e) {}
+      if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
       window.speechSynthesis?.cancel();
-      window.speechSynthesis?.removeEventListener?.("voiceschanged", onVoices);
       stopMic();
     };
   }, []);

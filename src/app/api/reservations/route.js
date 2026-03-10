@@ -1,5 +1,35 @@
 import store from '@/lib/store';
 
+// POST - Create new reservation
+export async function POST(req) {
+  try {
+    const data = await req.json();
+    const { name, date, time, guests, phone, notes, status } = data;
+
+    if (!name || !date || !time || !guests) {
+      return Response.json({ error: 'Missing required fields: name, date, time, guests' }, { status: 400 });
+    }
+
+    const maxId = store.reservations.reduce((max, r) => Math.max(max, r.id || 0), 0);
+    const newReservation = {
+      id: maxId + 1,
+      name,
+      date,
+      time,
+      guests: Number(guests),
+      phone: phone || '',
+      notes: notes || '',
+      status: status || 'confirmada',
+      source: 'manual',
+    };
+
+    store.reservations.push(newReservation);
+    return Response.json({ success: true, reservation: newReservation });
+  } catch (error) {
+    return Response.json({ error: error.message }, { status: 500 });
+  }
+}
+
 // PATCH - Update reservation (notes, status, etc.)
 export async function PATCH(req) {
   try {
