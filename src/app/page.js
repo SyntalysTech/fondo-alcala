@@ -173,7 +173,7 @@ export default function AgentPage() {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text, sessionId: sessionRef.current }),
+        body: JSON.stringify({ message: text, sessionId: sessionRef.current, history: messages }),
       });
 
       const reader = res.body.getReader();

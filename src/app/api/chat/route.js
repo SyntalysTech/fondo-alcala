@@ -180,11 +180,10 @@ Si mencionan la fecha y/o hora de la reserva a cancelar, inclúyelos para identi
 
 export async function POST(req) {
   try {
-    const { message, sessionId } = await req.json();
+    const { message, sessionId, history } = await req.json();
     const isNewCall = !store.conversations.has(sessionId);
 
     if (isNewCall) {
-      store.conversations.set(sessionId, [{ role: 'system', content: getCachedSystemPrompt() }]);
       store.metrics.totalCalls++;
       const today = new Date().toISOString().split('T')[0];
       store.metrics.dailyCalls[today] = (store.metrics.dailyCalls[today] || 0) + 1;
@@ -192,8 +191,18 @@ export async function POST(req) {
       store.metrics.peakHours[hour] = (store.metrics.peakHours[hour] || 0) + 1;
     }
 
-    const conv = store.conversations.get(sessionId);
-    conv.push({ role: 'user', content: message });
+    // Build conversation from client-sent history (serverless-safe: instances don't share memory)
+    const conv = [
+      { role: 'system', content: getCachedSystemPrompt() },
+      ...(history || []).map(m => ({
+        role: m.role === 'agent' ? 'assistant' : 'user',
+        content: m.text,
+      })),
+      { role: 'user', content: message },
+    ];
+
+    // Store for extraction (best-effort on same instance)
+    store.conversations.set(sessionId, conv);
 
     const keywords = detectKeywords(message);
     const intent = detectIntent(message);
