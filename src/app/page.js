@@ -303,7 +303,7 @@ export default function AgentPage() {
     setMessages([]); setShowTranscript(true);
     setStatus("processing"); statusRef.current = "processing";
 
-    const greeting = "Hola, buenas, le atiende Elena desde Fonda Alcalá. ¿En qué puedo ayudarle?";
+    const greeting = "Hola, buenas, le atiende Elena de Fonda Alcalá, dígame en qué puedo ayudarle.";
     addAgent(greeting);
 
     // Register session AND init mic in parallel (both must complete before listening)

@@ -1,7 +1,7 @@
 import store from '@/lib/store';
 import { getSystemPrompt } from '@/lib/prompt';
 
-const GREETING = 'Hola, buenas, le atiende Elena desde Fonda Alcalá. ¿En qué puedo ayudarle?';
+const GREETING = 'Hola, buenas, le atiende Elena de Fonda Alcalá, dígame en qué puedo ayudarle.';
 
 export async function POST(req) {
   try {
