@@ -1,5 +1,5 @@
 const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
-const VOICE_ID = process.env.ELEVENLABS_VOICE_ID || 'XrExE9yKIg1WjnnlVkGX'; // Matilde — warm Spanish female
+const VOICE_ID = process.env.ELEVENLABS_VOICE_ID || 'KDG2CWzkFgcZz4Vqbu8m';
 
 async function generateSpeech(text) {
   const res = await fetch(
