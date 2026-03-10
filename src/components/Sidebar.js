@@ -1,4 +1,5 @@
 "use client";
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -28,10 +29,66 @@ const icons = {
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const [open, setOpen] = useState(false);
 
   return (
     <>
-      {/* Desktop sidebar */}
+      {/* Mobile: hamburger button (top-left) */}
+      <button
+        onClick={() => setOpen(true)}
+        className="md:hidden fixed top-3 left-3 z-50 p-2 bg-white/90 backdrop-blur border border-warm-border rounded-lg shadow-sm"
+        aria-label="Abrir menú"
+      >
+        <svg className="w-5 h-5 text-stone-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+          <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
+        </svg>
+      </button>
+
+      {/* Mobile: overlay + slide-in drawer */}
+      {open && (
+        <div className="md:hidden fixed inset-0 z-50">
+          {/* Backdrop */}
+          <div className="absolute inset-0 bg-black/30" onClick={() => setOpen(false)} />
+          {/* Drawer */}
+          <aside className="absolute top-0 left-0 bottom-0 w-[260px] bg-white shadow-2xl flex flex-col animate-[slideIn_0.2s_ease]">
+            {/* Header with close */}
+            <div className="p-5 pb-3 border-b border-warm-gray flex items-start justify-between">
+              <div>
+                <img src="/logo.png" alt="Fonda Alcalá" className="h-12 mb-2" />
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-semibold tracking-widest text-stone-400 uppercase">Asistente IA</span>
+                  <span className="text-[9px] font-bold tracking-wider bg-gradient-to-r from-gold to-gold-dark text-white px-2 py-0.5 rounded">DEMO</span>
+                </div>
+              </div>
+              <button onClick={() => setOpen(false)} className="p-1.5 text-stone-400 hover:text-stone-600 mt-1">
+                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+            <nav className="flex-1 p-3 space-y-1">
+              {nav.map((item) => {
+                const active = pathname === item.href;
+                return (
+                  <Link key={item.href} href={item.href} onClick={() => setOpen(false)}
+                    className={`flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium transition-all ${
+                      active ? "bg-gold/10 text-gold-dark" : "text-stone-500 hover:bg-cream-dark hover:text-stone-700"
+                    }`}>
+                    <span className={active ? "text-gold" : "text-stone-400"}>{icons[item.icon]}</span>
+                    {item.labelFull}
+                  </Link>
+                );
+              })}
+            </nav>
+            <div className="p-4 border-t border-warm-gray">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-emerald-400"></div>
+                <span className="text-[11px] text-stone-400">Sistema activo 24/7</span>
+              </div>
+            </div>
+          </aside>
+        </div>
+      )}
+
+      {/* Desktop sidebar (always visible) */}
       <aside className="hidden md:flex w-[220px] bg-white border-r border-warm-gray flex-col shrink-0">
         <div className="p-5 pb-3 border-b border-warm-gray">
           <img src="/logo.png" alt="Fonda Alcalá" className="h-14 mb-2" />
@@ -61,22 +118,6 @@ export default function Sidebar() {
           </div>
         </div>
       </aside>
-
-      {/* Mobile bottom nav */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-warm-gray flex z-50 safe-area-bottom">
-        {nav.map((item) => {
-          const active = pathname === item.href;
-          return (
-            <Link key={item.href} href={item.href}
-              className={`flex-1 flex flex-col items-center gap-0.5 py-2 pt-2.5 text-[10px] font-medium transition-colors ${
-                active ? "text-gold-dark" : "text-stone-400"
-              }`}>
-              <span className={active ? "text-gold" : "text-stone-400"}>{icons[item.icon]}</span>
-              {item.label}
-            </Link>
-          );
-        })}
-      </nav>
     </>
   );
 }
