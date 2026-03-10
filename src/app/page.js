@@ -111,7 +111,7 @@ export default function AgentPage() {
           const t = final.trim();
           if (t) { intentionalStop = true; try { r.stop(); } catch (e) {} send(t); }
           final = "";
-        }, 300);
+        }, 150);
       }
     };
     r.onerror = (e) => { if (e.error !== "no-speech" && e.error !== "aborted") console.error("SR error:", e.error); };
@@ -119,18 +119,43 @@ export default function AgentPage() {
       if (inCallRef.current && !intentionalStop && statusRef.current === "listening") {
         setTimeout(() => {
           if (inCallRef.current && statusRef.current === "listening") startListening();
-        }, 100);
+        }, 50);
       }
     };
     try { r.start(); setStatus("listening"); statusRef.current = "listening"; } catch (e) {}
   }, []);
 
-  // Send message (streaming SSE)
+  // Fetch TTS for a sentence and return as Blob
+  const fetchSentenceTTS = (sentence) =>
+    fetch("/api/tts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: sentence }),
+    }).then(r => r.ok ? r.blob() : null).catch(() => null);
+
+  // Play a single audio Blob, returns promise that resolves when done
+  const playBlob = (blob) =>
+    new Promise((resolve) => {
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audioRef.current = audio;
+      let resolved = false;
+      const done = () => { if (!resolved) { resolved = true; URL.revokeObjectURL(url); resolve(); } };
+      audio.onended = done;
+      audio.onerror = done;
+      setTimeout(done, 15000);
+      audio.play().catch(done);
+    });
+
+  // Send message (streaming SSE + overlapped sentence-level TTS)
   const send = async (text) => {
     const time = new Date().toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
     setMessages(prev => [...prev, { role: "user", text, time }]);
     setStatus("processing"); statusRef.current = "processing";
     setTyping(true);
+
+    // Stop recognition immediately to prevent re-triggers
+    if (recogRef.current) try { recogRef.current.abort(); } catch (e) {}
 
     try {
       const res = await fetch("/api/chat", {
@@ -142,7 +167,34 @@ export default function AgentPage() {
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buf = "", fullText = "", meta = null;
+      let sentenceBuf = "";
+      const sentenceAudios = []; // Promise<Blob>[]
+      let streamDone = false;
 
+      // Queue a sentence for TTS immediately (parallel fetch)
+      const queueSentenceTTS = (sentence) => {
+        sentenceAudios.push(fetchSentenceTTS(sentence));
+      };
+
+      // Playback loop — runs concurrently with stream reading
+      // Plays each sentence's audio as soon as its TTS blob resolves
+      const playbackPromise = (async () => {
+        let i = 0;
+        while (true) {
+          if (i < sentenceAudios.length) {
+            if (i === 0) { setStatus("speaking"); statusRef.current = "speaking"; }
+            const blob = await sentenceAudios[i];
+            if (blob && inCallRef.current) await playBlob(blob);
+            i++;
+          } else if (streamDone) {
+            break;
+          } else {
+            await new Promise(r => setTimeout(r, 30));
+          }
+        }
+      })();
+
+      // Read SSE stream and detect sentence boundaries in real-time
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
@@ -153,11 +205,23 @@ export default function AgentPage() {
           if (!line.startsWith("data: ")) continue;
           try {
             const ev = JSON.parse(line.slice(6));
-            if (ev.d) fullText += ev.d;
+            if (ev.d) {
+              fullText += ev.d;
+              sentenceBuf += ev.d;
+              // Sentence boundary: ends with . ! ? and has enough content
+              if (/[.!?]\s*$/.test(sentenceBuf) && sentenceBuf.trim().length > 5) {
+                queueSentenceTTS(sentenceBuf.trim());
+                sentenceBuf = "";
+              }
+            }
             if (ev.done) meta = ev;
           } catch (e) {}
         }
       }
+
+      // Flush remaining text as final sentence
+      if (sentenceBuf.trim()) queueSentenceTTS(sentenceBuf.trim());
+      streamDone = true;
 
       setTyping(false);
       if (!meta || !fullText) {
@@ -167,7 +231,9 @@ export default function AgentPage() {
       }
 
       addAgent(fullText, meta.keywords, meta.intent);
-      await playTTS(fullText);
+
+      // Wait for all audio playback to finish
+      await playbackPromise;
 
       // Auto hang up ONLY on clear farewell phrases (not partial matches)
       const lower = fullText.toLowerCase();
@@ -236,6 +302,21 @@ export default function AgentPage() {
     });
   };
 
+  // Pre-cache greeting TTS blob so call start is instant
+  const greetingBlobRef = useRef(null);
+  const GREETING = "Hola, buenas, le atiende Elena desde Fonda Alcalá. ¿En qué puedo ayudarle?";
+
+  // Pre-warm: fetch greeting TTS + establish OpenAI connection on mount
+  useEffect(() => {
+    fetch("/api/tts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: GREETING }),
+    }).then(r => r.ok ? r.blob() : null).then(blob => {
+      greetingBlobRef.current = blob;
+    }).catch(() => {});
+  }, []);
+
   // Unlock audio context on first user interaction (needed for autoplay policies)
   const unlockAudio = () => {
     const audio = new Audio();
@@ -251,8 +332,7 @@ export default function AgentPage() {
     setStatus("processing"); statusRef.current = "processing";
     await initMic();
 
-    const greeting = "Hola, buenas, le atiende Elena desde Fonda Alcalá. ¿En qué puedo ayudarle?";
-    addAgent(greeting);
+    addAgent(GREETING);
 
     // Register session with the EXACT greeting (keeps conversation in sync)
     fetch("/api/init-call", {
@@ -261,7 +341,14 @@ export default function AgentPage() {
       body: JSON.stringify({ sessionId: sessionRef.current }),
     }).catch(() => {});
 
-    await playTTS(greeting);
+    // Use pre-cached greeting blob if available (instant), otherwise fetch
+    if (greetingBlobRef.current) {
+      if (recogRef.current) try { recogRef.current.abort(); } catch (e) {}
+      setStatus("speaking"); statusRef.current = "speaking";
+      await playBlob(greetingBlobRef.current);
+    } else {
+      await playTTS(GREETING);
+    }
     setStatus("listening"); statusRef.current = "listening";
     startListening();
   };

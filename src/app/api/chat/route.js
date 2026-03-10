@@ -4,6 +4,18 @@ import { getSystemPrompt } from '@/lib/prompt';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
+// Cache system prompt — recalculate only every 60s (date/time changes)
+let _cachedPrompt = null;
+let _promptCacheTime = 0;
+function getCachedSystemPrompt() {
+  const now = Date.now();
+  if (!_cachedPrompt || now - _promptCacheTime > 60000) {
+    _cachedPrompt = getSystemPrompt();
+    _promptCacheTime = now;
+  }
+  return _cachedPrompt;
+}
+
 // Helper: get today and day-of-week info for extraction prompts
 function getDateContext() {
   const now = new Date();
@@ -172,7 +184,7 @@ export async function POST(req) {
     const isNewCall = !store.conversations.has(sessionId);
 
     if (isNewCall) {
-      store.conversations.set(sessionId, [{ role: 'system', content: getSystemPrompt() }]);
+      store.conversations.set(sessionId, [{ role: 'system', content: getCachedSystemPrompt() }]);
       store.metrics.totalCalls++;
       const today = new Date().toISOString().split('T')[0];
       store.metrics.dailyCalls[today] = (store.metrics.dailyCalls[today] || 0) + 1;
@@ -190,7 +202,7 @@ export async function POST(req) {
     const stream = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: conv,
-      temperature: 0.5,
+      temperature: 0.3,
       max_tokens: 150,
       stream: true,
     });
@@ -210,13 +222,17 @@ export async function POST(req) {
 
         conv.push({ role: 'assistant', content: fullText });
 
+        // Send done event IMMEDIATELY — logging/extraction happens after (non-blocking)
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ done: true, response: fullText, keywords, intent, isNewCall })}\n\n`));
+        controller.close();
+
+        // Background: metrics and extraction (after response is sent)
         const lower = fullText.toLowerCase();
         const isReservation = !!lower.match(/queda (anotada|registrada|confirmada)|les esperamos|os esperamos|reserva para \d+ persona/);
         const isCancellation = !!lower.match(/cancelada|anulada|queda cancelada/);
 
         if (isReservation) {
           store.metrics.totalReservations++;
-          // Extract and save reservation in background (no await = no latency)
           extractAndSaveReservation([...conv], sessionId);
         }
         if (isCancellation) {
@@ -232,9 +248,6 @@ export async function POST(req) {
           intent,
           keywords,
         });
-
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ done: true, response: fullText, keywords, intent, isNewCall })}\n\n`));
-        controller.close();
       },
     });
 
