@@ -22,6 +22,7 @@ export default function AgentPage() {
   const inCallRef = useRef(false);
   const statusRef = useRef("idle");
   const audioRef = useRef(null);
+  const audioSourceRef = useRef(null);
   const sendRef = useRef(null);
 
   useEffect(() => {
@@ -140,19 +141,27 @@ export default function AgentPage() {
       .catch(() => { clearTimeout(timeout); return null; });
   };
 
-  // Play a single audio Blob, returns promise that resolves when done
-  const playBlob = (blob) =>
-    new Promise((resolve) => {
-      const url = URL.createObjectURL(blob);
-      const audio = new Audio(url);
-      audioRef.current = audio;
-      let resolved = false;
-      const done = () => { if (!resolved) { resolved = true; URL.revokeObjectURL(url); resolve(); } };
-      audio.onended = done;
-      audio.onerror = done;
-      setTimeout(done, 15000);
-      audio.play().catch(done);
-    });
+  // Play a single audio Blob via AudioContext (bypasses iOS autoplay restrictions)
+  const playBlob = async (blob) => {
+    const actx = actxRef.current;
+    if (!actx) return;
+    if (actx.state === "suspended") await actx.resume();
+    try {
+      const arrayBuffer = await blob.arrayBuffer();
+      const audioBuffer = await actx.decodeAudioData(arrayBuffer);
+      return new Promise((resolve) => {
+        const source = actx.createBufferSource();
+        source.buffer = audioBuffer;
+        source.connect(actx.destination);
+        audioSourceRef.current = source;
+        let resolved = false;
+        const done = () => { if (!resolved) { resolved = true; resolve(); } };
+        source.onended = done;
+        setTimeout(done, (audioBuffer.duration + 2) * 1000);
+        source.start(0);
+      });
+    } catch (e) { console.warn("playBlob error:", e); }
+  };
 
   const addAgent = (text, kws, intent) => {
     const time = new Date().toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
@@ -318,6 +327,7 @@ export default function AgentPage() {
     if (recogRef.current) try { recogRef.current.abort(); } catch (e) {}
     recogRef.current = null;
     if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
+    if (audioSourceRef.current) { try { audioSourceRef.current.stop(); } catch (e) {} audioSourceRef.current = null; }
     window.speechSynthesis?.cancel();
     stopMic();
     setInCall(false);
@@ -335,6 +345,7 @@ export default function AgentPage() {
       clearTimeout(silenceRef.current);
       if (recogRef.current) try { recogRef.current.stop(); } catch (e) {}
       if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
+      if (audioSourceRef.current) { try { audioSourceRef.current.stop(); } catch (e) {} audioSourceRef.current = null; }
       window.speechSynthesis?.cancel();
       stopMic();
     };
