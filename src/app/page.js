@@ -3,16 +3,16 @@ import { useState, useEffect, useRef, useCallback } from "react";
 
 export default function AgentPage() {
   const [inCall, setInCall] = useState(false);
-  const [status, setStatus] = useState("idle"); // idle | listening | speaking | processing
+  const [status, setStatus] = useState("idle");
   const [messages, setMessages] = useState([]);
   const [timer, setTimer] = useState(0);
   const [typing, setTyping] = useState(false);
+  const [showTranscript, setShowTranscript] = useState(false);
 
   const sessionRef = useRef(null);
   const timerRef = useRef(null);
   const recogRef = useRef(null);
   const silenceRef = useRef(null);
-  const audioRef = useRef(null);
   const actxRef = useRef(null);
   const analyserRef = useRef(null);
   const streamRef = useRef(null);
@@ -21,20 +21,17 @@ export default function AgentPage() {
   const scrollRef = useRef(null);
   const inCallRef = useRef(false);
   const statusRef = useRef("idle");
+  const speakTimerRef = useRef(null);
 
-  // Auto scroll
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, typing]);
 
-  // Timer
   useEffect(() => {
     if (inCall) {
       setTimer(0);
       timerRef.current = setInterval(() => setTimer(t => t + 1), 1000);
-    } else {
-      clearInterval(timerRef.current);
-    }
+    } else clearInterval(timerRef.current);
     return () => clearInterval(timerRef.current);
   }, [inCall]);
 
@@ -46,7 +43,6 @@ export default function AgentPage() {
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     const W = 300, H = 300, CX = W / 2, CY = H / 2, R = 108;
-
     const draw = () => {
       animRef.current = requestAnimationFrame(draw);
       ctx.clearRect(0, 0, W, H);
@@ -73,7 +69,6 @@ export default function AgentPage() {
     return () => cancelAnimationFrame(animRef.current);
   }, [inCall, status]);
 
-  // Init mic
   const initMic = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -94,7 +89,7 @@ export default function AgentPage() {
     analyserRef.current = null;
   };
 
-  // Speech recognition - auto-restarts when it dies
+  // Speech recognition with auto-restart
   const startListening = useCallback(() => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) return;
@@ -120,29 +115,22 @@ export default function AgentPage() {
         }, 300);
       }
     };
-    r.onerror = (e) => {
-      if (e.error !== "no-speech" && e.error !== "aborted") console.error("SR error:", e.error);
-    };
+    r.onerror = (e) => { if (e.error !== "no-speech" && e.error !== "aborted") console.error("SR error:", e.error); };
     r.onend = () => {
-      // Auto-restart if still in call and not intentionally stopped
       if (inCallRef.current && !intentionalStop && statusRef.current === "listening") {
         setTimeout(() => {
-          if (inCallRef.current && statusRef.current === "listening") {
-            startListening();
-          }
+          if (inCallRef.current && statusRef.current === "listening") startListening();
         }, 100);
       }
     };
-
     try { r.start(); setStatus("listening"); statusRef.current = "listening"; } catch (e) {}
   }, []);
 
-  // Send message to API (streaming SSE)
+  // Send message (streaming SSE)
   const send = async (text) => {
     const time = new Date().toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
     setMessages(prev => [...prev, { role: "user", text, time }]);
-    setStatus("processing");
-    statusRef.current = "processing";
+    setStatus("processing"); statusRef.current = "processing";
     setTyping(true);
 
     try {
@@ -154,9 +142,7 @@ export default function AgentPage() {
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
-      let buf = "";
-      let fullText = "";
-      let meta = null;
+      let buf = "", fullText = "", meta = null;
 
       while (true) {
         const { value, done } = await reader.read();
@@ -175,7 +161,6 @@ export default function AgentPage() {
       }
 
       setTyping(false);
-
       if (!meta || !fullText) {
         addAgent("Disculpe, ha habido un problema. ¿Puede repetir?");
         setStatus("listening"); statusRef.current = "listening"; startListening();
@@ -185,9 +170,9 @@ export default function AgentPage() {
       addAgent(fullText, meta.keywords, meta.intent);
       await playTTS(fullText);
 
-      // Auto hang up if Elena says goodbye / confirms reservation end
+      // Auto hang up ONLY on clear farewell phrases (not partial matches)
       const lower = fullText.toLowerCase();
-      if (/les esperamos|os esperamos|hasta luego|adiós|buen día|buenas tardes|que vaya bien|un placer/.test(lower)) {
+      if (/les esperamos|os esperamos|hasta luego|adiós|que vaya bien/.test(lower)) {
         setTimeout(() => endCall(), 1500);
         return;
       }
@@ -208,12 +193,11 @@ export default function AgentPage() {
     setMessages(prev => [...prev, { role: "agent", text, time, keywords: kws, intent }]);
   };
 
-  // Get best Spanish voice (cached)
+  // Voice selection (cached)
   const voiceRef = useRef(null);
   const getVoice = () => {
     if (voiceRef.current) return voiceRef.current;
     const voices = window.speechSynthesis.getVoices();
-    // Priority: Google español (neural) > Mónica Enhanced > any es-ES > any es
     const pick = voices.find(v => v.lang === "es-ES" && v.name.toLowerCase().includes("google"))
       || voices.find(v => v.lang === "es-ES" && v.name.toLowerCase().includes("enhanced"))
       || voices.find(v => v.lang === "es-ES" && !v.localService)
@@ -223,13 +207,12 @@ export default function AgentPage() {
     return pick;
   };
 
-  // TTS - instant browser speech (0ms latency)
+  // TTS with Chrome safety timeout (Chrome bug: onend sometimes doesn't fire)
   const playTTS = (text) => {
     if (recogRef.current) try { recogRef.current.abort(); } catch (e) {}
-
-    setStatus("speaking");
-    statusRef.current = "speaking";
+    setStatus("speaking"); statusRef.current = "speaking";
     window.speechSynthesis.cancel();
+    clearInterval(speakTimerRef.current);
 
     return new Promise((resolve) => {
       const utt = new SpeechSynthesisUtterance(text);
@@ -239,60 +222,70 @@ export default function AgentPage() {
       utt.volume = 1.0;
       const v = getVoice();
       if (v) utt.voice = v;
-      utt.onend = () => resolve();
-      utt.onerror = () => resolve();
+
+      let resolved = false;
+      const done = () => { if (!resolved) { resolved = true; clearInterval(speakTimerRef.current); resolve(); } };
+
+      utt.onend = done;
+      utt.onerror = done;
+
+      // Chrome bug: speechSynthesis pauses after ~15s and onend never fires
+      // Keep it alive with resume() and add safety timeout
+      speakTimerRef.current = setInterval(() => {
+        if (!window.speechSynthesis.speaking) { done(); return; }
+        window.speechSynthesis.pause();
+        window.speechSynthesis.resume();
+      }, 5000);
+
+      // Safety timeout: max 20 seconds of speaking
+      setTimeout(done, 20000);
+
       window.speechSynthesis.speak(utt);
     });
   };
 
-  // Unlock audio context on user gesture
   const unlockAudio = () => {
     window.speechSynthesis.cancel();
     window.speechSynthesis.getVoices();
-    // Warm up with empty utterance
     const utt = new SpeechSynthesisUtterance("");
     utt.volume = 0;
     window.speechSynthesis.speak(utt);
   };
 
-  // Start call
+  // Start call — uses /api/init-call to sync conversation with hardcoded greeting
   const startCall = async () => {
-    // MUST unlock audio in the same click handler
     unlockAudio();
-
     sessionRef.current = "call_" + Date.now();
-    setInCall(true);
-    inCallRef.current = true;
-    setMessages([]);
-    setStatus("processing");
-    statusRef.current = "processing";
+    setInCall(true); inCallRef.current = true;
+    setMessages([]); setShowTranscript(true);
+    setStatus("processing"); statusRef.current = "processing";
     await initMic();
 
-    // Instant greeting (no API wait) + register session in background
     const greeting = "Hola, buenas, le atiende Elena desde Fonda Alcalá. ¿En qué puedo ayudarle?";
     addAgent(greeting);
-    // Register session in background (don't wait)
-    fetch("/api/chat", {
+
+    // Register session with the EXACT greeting (keeps conversation in sync)
+    fetch("/api/init-call", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: "Hola, acabo de llamar al restaurante.", sessionId: sessionRef.current }),
+      body: JSON.stringify({ sessionId: sessionRef.current }),
     }).catch(() => {});
+
     await playTTS(greeting);
     setStatus("listening"); statusRef.current = "listening";
     startListening();
   };
 
-  // End call
   const endCall = () => {
     inCallRef.current = false;
     clearTimeout(silenceRef.current);
+    clearInterval(speakTimerRef.current);
     if (recogRef.current) try { recogRef.current.abort(); } catch (e) {}
     recogRef.current = null;
     window.speechSynthesis?.cancel();
     stopMic();
     setInCall(false);
-    setStatus("idle");
-    statusRef.current = "idle";
+    setStatus("idle"); statusRef.current = "idle";
     fetch("/api/end-call", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -301,13 +294,13 @@ export default function AgentPage() {
   };
 
   useEffect(() => {
-    // Preload voices
     window.speechSynthesis?.getVoices();
-    const onVoices = () => { getVoice(); };
+    const onVoices = () => getVoice();
     window.speechSynthesis?.addEventListener?.("voiceschanged", onVoices);
     return () => {
       clearInterval(timerRef.current);
       clearTimeout(silenceRef.current);
+      clearInterval(speakTimerRef.current);
       if (recogRef.current) try { recogRef.current.stop(); } catch (e) {}
       window.speechSynthesis?.cancel();
       window.speechSynthesis?.removeEventListener?.("voiceschanged", onVoices);
@@ -321,34 +314,26 @@ export default function AgentPage() {
   const intentColors = { reserva: "bg-emerald-50 text-emerald-600", cancelación: "bg-red-50 text-red-500", default: "bg-stone-100 text-stone-500" };
 
   return (
-    <div className="flex h-full">
+    <div className="flex flex-col md:flex-row h-full">
       {/* Call Area */}
-      <div className="flex-1 flex flex-col items-center justify-center relative bg-gradient-to-b from-white to-cream">
+      <div className="flex-1 flex flex-col items-center justify-center relative bg-gradient-to-b from-white to-cream min-h-[60vh] md:min-h-0 p-4">
         {/* Orb */}
-        <div className="relative mb-7 group cursor-pointer" onClick={inCall ? endCall : startCall}>
+        <div className="relative mb-5 md:mb-7 group cursor-pointer" onClick={inCall ? endCall : startCall}>
           <canvas ref={canvasRef} width={300} height={300} className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none" style={{ width: 300, height: 300 }} />
-
-          {/* Ring */}
           <div className={`absolute inset-[-6px] rounded-full border-2 transition-all duration-500 ${
             inCall ? (status === "speaking" ? "border-gold animate-pulse-gold" : "border-gold shadow-[0_0_0_8px_rgba(196,162,101,0.08)]") : "border-warm-border"
           }`} />
-
-          {/* Body */}
-          <div className={`relative w-[220px] h-[220px] rounded-full bg-white flex items-center justify-center overflow-hidden transition-all duration-300 ${
+          <div className={`relative w-[180px] h-[180px] md:w-[220px] md:h-[220px] rounded-full bg-white flex items-center justify-center overflow-hidden transition-all duration-300 ${
             inCall ? "shadow-lg shadow-gold/15" : "shadow-lg shadow-stone-200/60 group-hover:shadow-xl group-hover:scale-[1.02]"
           }`}>
-            <img src="/logo.png" alt="Fonda Alcalá" className={`w-20 transition-opacity duration-300 ${!inCall ? "group-hover:opacity-25" : ""}`} />
-
-            {/* Phone overlay */}
+            <img src="/logo.png" alt="Fonda Alcalá" className={`w-16 md:w-20 transition-opacity duration-300 ${!inCall ? "group-hover:opacity-25" : ""}`} />
             {!inCall && (
               <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                <svg className="w-12 h-12 text-gold" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <svg className="w-10 h-10 md:w-12 md:h-12 text-gold" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                   <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.12 4.11 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.362 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.338 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
               </div>
             )}
-
-            {/* End call overlay */}
             {inCall && (
               <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 group-hover:bg-red-50/60 transition-all rounded-full">
                 <svg className="w-10 h-10 text-red-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
@@ -357,51 +342,66 @@ export default function AgentPage() {
           </div>
         </div>
 
-        {/* Info */}
-        <h1 className="text-2xl font-semibold text-stone-800 tracking-tight mb-1 font-serif">Fonda Alcalá</h1>
-        <p className={`text-[11px] font-semibold tracking-[2px] mb-3 transition-colors ${statusColor[status]}`}>{statusLabel[status]}</p>
-        {inCall && <p className="text-xl font-light text-stone-700 tracking-[3px] tabular-nums mb-4">{fmt(timer)}</p>}
+        <h1 className="text-xl md:text-2xl font-semibold text-stone-800 tracking-tight mb-1 font-serif">Fonda Alcalá</h1>
+        <p className={`text-[11px] font-semibold tracking-[2px] mb-2 md:mb-3 transition-colors ${statusColor[status]}`}>{statusLabel[status]}</p>
+        {inCall && <p className="text-lg md:text-xl font-light text-stone-700 tracking-[3px] tabular-nums mb-3 md:mb-4">{fmt(timer)}</p>}
 
         {inCall && (
-          <button onClick={endCall} className="flex items-center gap-2 px-5 py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-full text-sm font-medium shadow-lg shadow-red-200 transition-all hover:scale-105">
-            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-            Colgar
-          </button>
+          <div className="flex gap-2">
+            <button onClick={endCall} className="flex items-center gap-2 px-4 md:px-5 py-2 md:py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-full text-sm font-medium shadow-lg shadow-red-200 transition-all hover:scale-105">
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              Colgar
+            </button>
+            {/* Mobile: toggle transcript */}
+            <button onClick={() => setShowTranscript(!showTranscript)} className="md:hidden flex items-center gap-1.5 px-4 py-2 bg-white border border-stone-200 text-stone-600 rounded-full text-sm font-medium shadow transition-all">
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+              Chat
+            </button>
+          </div>
         )}
 
-        {!inCall && <p className="absolute bottom-8 text-xs text-stone-400 text-center max-w-xs">Haz clic en el orbe para simular una llamada con el asistente de voz</p>}
+        {!inCall && <p className="absolute bottom-4 md:bottom-8 text-xs text-stone-400 text-center max-w-xs px-4">Haz clic en el orbe para simular una llamada con el asistente de voz</p>}
       </div>
 
-      {/* Transcript */}
-      <div className={`bg-white border-l border-warm-gray flex flex-col transition-all duration-500 ${inCall ? "w-[400px] opacity-100" : "w-0 opacity-0 overflow-hidden"}`}>
-        <div className="flex items-center justify-between px-5 py-4 border-b border-stone-100 shrink-0">
+      {/* Transcript - slide up on mobile, side panel on desktop */}
+      <div className={`bg-white border-t md:border-t-0 md:border-l border-warm-gray flex flex-col transition-all duration-500 ${
+        inCall && showTranscript
+          ? "h-[40vh] md:h-auto md:w-[400px] opacity-100"
+          : "h-0 md:w-0 opacity-0 overflow-hidden"
+      }`}>
+        <div className="flex items-center justify-between px-4 md:px-5 py-3 md:py-4 border-b border-stone-100 shrink-0">
           <h2 className="text-[13px] font-semibold text-stone-700">Transcripción en vivo</h2>
-          <div className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-red-500 animate-blink" />
-            <span className="text-[10px] font-bold text-red-500 tracking-wider">REC</span>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-red-500 animate-blink" />
+              <span className="text-[10px] font-bold text-red-500 tracking-wider">REC</span>
+            </div>
+            <button onClick={() => setShowTranscript(false)} className="md:hidden p-1 text-stone-400 hover:text-stone-600">
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+        <div className="flex-1 overflow-y-auto px-3 md:px-4 py-3 md:py-4 space-y-3 md:space-y-4">
           {messages.map((m, i) => (
-            <div key={i} className="flex gap-2.5 animate-[fadeIn_0.3s_ease]">
-              <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-[10px] font-bold shrink-0 ${
+            <div key={i} className="flex gap-2 md:gap-2.5 animate-[fadeIn_0.3s_ease]">
+              <div className={`w-6 h-6 md:w-7 md:h-7 rounded-lg flex items-center justify-center text-[9px] md:text-[10px] font-bold shrink-0 ${
                 m.role === "agent" ? "bg-gradient-to-br from-gold to-gold-dark text-white" : "bg-indigo-50 text-indigo-500 border border-indigo-100"
               }`}>{m.role === "agent" ? "FA" : "CL"}</div>
               <div className="flex-1 min-w-0">
-                <p className={`text-[10px] font-semibold mb-1 ${m.role === "agent" ? "text-gold" : "text-indigo-500"}`}>
+                <p className={`text-[10px] font-semibold mb-0.5 md:mb-1 ${m.role === "agent" ? "text-gold" : "text-indigo-500"}`}>
                   {m.role === "agent" ? "Elena — Fonda Alcalá" : "Cliente"}
                 </p>
-                <div className={`text-[13px] leading-relaxed p-3 rounded-xl ${
+                <div className={`text-[12px] md:text-[13px] leading-relaxed p-2.5 md:p-3 rounded-xl ${
                   m.role === "agent" ? "bg-stone-50 text-stone-700 rounded-tl-sm" : "bg-indigo-50 text-stone-700 rounded-tr-sm"
                 }`}>{m.text}</div>
-                <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-                  <span className="text-[10px] text-stone-400">{m.time}</span>
+                <div className="flex items-center gap-1 md:gap-1.5 mt-1 md:mt-1.5 flex-wrap">
+                  <span className="text-[9px] md:text-[10px] text-stone-400">{m.time}</span>
                   {m.keywords?.map((k, j) => (
-                    <span key={j} className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-gold/10 text-gold-dark border border-gold/15">{k}</span>
+                    <span key={j} className="text-[8px] md:text-[9px] font-semibold px-1.5 py-0.5 rounded bg-gold/10 text-gold-dark border border-gold/15">{k}</span>
                   ))}
                   {m.intent && (
-                    <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded ${intentColors[m.intent] || intentColors.default}`}>
+                    <span className={`text-[8px] md:text-[9px] font-semibold px-1.5 py-0.5 rounded ${intentColors[m.intent] || intentColors.default}`}>
                       {intentLabels[m.intent] || m.intent}
                     </span>
                   )}
@@ -411,10 +411,10 @@ export default function AgentPage() {
           ))}
 
           {typing && (
-            <div className="flex gap-2.5">
-              <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-gold to-gold-dark text-white flex items-center justify-center text-[10px] font-bold shrink-0">FA</div>
+            <div className="flex gap-2 md:gap-2.5">
+              <div className="w-6 h-6 md:w-7 md:h-7 rounded-lg bg-gradient-to-br from-gold to-gold-dark text-white flex items-center justify-center text-[9px] md:text-[10px] font-bold shrink-0">FA</div>
               <div>
-                <p className="text-[10px] font-semibold text-gold mb-1">Elena — Fonda Alcalá</p>
+                <p className="text-[10px] font-semibold text-gold mb-0.5 md:mb-1">Elena — Fonda Alcalá</p>
                 <div className="bg-stone-50 rounded-xl rounded-tl-sm px-4 py-3 flex gap-1.5">
                   {[0, 1, 2].map(i => (
                     <span key={i} className="w-1.5 h-1.5 rounded-full bg-gold/50 animate-bounce" style={{ animationDelay: `${i * 150}ms` }} />
@@ -426,7 +426,7 @@ export default function AgentPage() {
           <div ref={scrollRef} />
         </div>
 
-        <div className="px-5 py-3 border-t border-stone-100 shrink-0">
+        <div className="px-4 md:px-5 py-2 md:py-3 border-t border-stone-100 shrink-0">
           <p className="text-[10px] text-stone-400 text-center">{messages.length} mensajes · {fmt(timer)}</p>
         </div>
       </div>

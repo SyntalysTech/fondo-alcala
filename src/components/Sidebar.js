@@ -3,10 +3,10 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const nav = [
-  { href: "/", label: "Agente de Voz", icon: "phone" },
-  { href: "/metricas", label: "Métricas", icon: "chart" },
-  { href: "/reservas", label: "Reservas", icon: "calendar" },
-  { href: "/historial", label: "Historial", icon: "list" },
+  { href: "/", label: "Agente", labelFull: "Agente de Voz", icon: "phone" },
+  { href: "/metricas", label: "Métricas", labelFull: "Métricas", icon: "chart" },
+  { href: "/reservas", label: "Reservas", labelFull: "Reservas", icon: "calendar" },
+  { href: "/historial", label: "Historial", labelFull: "Historial", icon: "list" },
 ];
 
 const icons = {
@@ -30,44 +30,53 @@ export default function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="w-[220px] bg-white border-r border-warm-gray flex flex-col shrink-0">
-      {/* Logo */}
-      <div className="p-5 pb-3 border-b border-warm-gray">
-        <img src="/logo.png" alt="Fonda Alcalá" className="h-14 mb-2" />
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] font-semibold tracking-widest text-stone-400 uppercase">Asistente IA</span>
-          <span className="text-[9px] font-bold tracking-wider bg-gradient-to-r from-gold to-gold-dark text-white px-2 py-0.5 rounded">DEMO</span>
+    <>
+      {/* Desktop sidebar */}
+      <aside className="hidden md:flex w-[220px] bg-white border-r border-warm-gray flex-col shrink-0">
+        <div className="p-5 pb-3 border-b border-warm-gray">
+          <img src="/logo.png" alt="Fonda Alcalá" className="h-14 mb-2" />
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-semibold tracking-widest text-stone-400 uppercase">Asistente IA</span>
+            <span className="text-[9px] font-bold tracking-wider bg-gradient-to-r from-gold to-gold-dark text-white px-2 py-0.5 rounded">DEMO</span>
+          </div>
         </div>
-      </div>
+        <nav className="flex-1 p-3 space-y-1">
+          {nav.map((item) => {
+            const active = pathname === item.href;
+            return (
+              <Link key={item.href} href={item.href}
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium transition-all ${
+                  active ? "bg-gold/10 text-gold-dark" : "text-stone-500 hover:bg-cream-dark hover:text-stone-700"
+                }`}>
+                <span className={active ? "text-gold" : "text-stone-400"}>{icons[item.icon]}</span>
+                {item.labelFull}
+              </Link>
+            );
+          })}
+        </nav>
+        <div className="p-4 border-t border-warm-gray">
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-emerald-400"></div>
+            <span className="text-[11px] text-stone-400">Sistema activo 24/7</span>
+          </div>
+        </div>
+      </aside>
 
-      {/* Nav */}
-      <nav className="flex-1 p-3 space-y-1">
+      {/* Mobile bottom nav */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-warm-gray flex z-50 safe-area-bottom">
         {nav.map((item) => {
           const active = pathname === item.href;
           return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium transition-all ${
-                active
-                  ? "bg-gold/10 text-gold-dark"
-                  : "text-stone-500 hover:bg-cream-dark hover:text-stone-700"
-              }`}
-            >
+            <Link key={item.href} href={item.href}
+              className={`flex-1 flex flex-col items-center gap-0.5 py-2 pt-2.5 text-[10px] font-medium transition-colors ${
+                active ? "text-gold-dark" : "text-stone-400"
+              }`}>
               <span className={active ? "text-gold" : "text-stone-400"}>{icons[item.icon]}</span>
               {item.label}
             </Link>
           );
         })}
       </nav>
-
-      {/* Footer */}
-      <div className="p-4 border-t border-warm-gray">
-        <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-emerald-400"></div>
-          <span className="text-[11px] text-stone-400">Sistema activo 24/7</span>
-        </div>
-      </div>
-    </aside>
+    </>
   );
 }
