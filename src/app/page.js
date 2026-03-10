@@ -249,7 +249,7 @@ export default function AgentPage() {
 
       // Auto hang up ONLY on clear farewell phrases
       const lower = fullText.toLowerCase();
-      if (/les esperamos|os esperamos|hasta luego|adiós|que vaya bien/.test(lower)) {
+      if (/les esperamos|os esperamos|ahí os esperamos|ahí les esperamos|hasta luego|adiós|que vaya bien/.test(lower)) {
         setTimeout(() => endCall(), 1500);
         return;
       }
